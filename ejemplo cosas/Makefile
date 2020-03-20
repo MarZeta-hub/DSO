@@ -9,11 +9,7 @@ LDFLAGS	= libinterrupt.a
 HEADERS = mythread.h queue.h my_io.h
 
 
-<<<<<<< Updated upstream
 OBJS	= mythreadlib.o queue.o my_io.o
-=======
-OBJS	= RR.o queue.o my_io.o
->>>>>>> Stashed changes
 
 LIBS	= -lm -lrt
 
