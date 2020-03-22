@@ -19,11 +19,7 @@ int main(int argc, char *argv[])
 
 
   mythread_setpriority(LOW_PRIORITY);
-<<<<<<< Updated upstream
-  if((f = mythread_create(function_thread,HIGH_PRIORITY,2)) == -1){
-=======
   if((f = mythread_create(function_thread,HIGH_PRIORITY,5)) == -1){
->>>>>>> Stashed changes
       printf("thread failed to initialize\n");
       exit(-1);
   }
