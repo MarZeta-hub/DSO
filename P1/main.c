@@ -23,9 +23,8 @@ int main(int argc, char *argv[])
       printf("thread failed to initialize\n");
       exit(-1);
   }
-  
-  read_disk();
-  read_disk();
+  //read_disk();
+  //read_disk();
 
   if((j = mythread_create(function_thread,HIGH_PRIORITY, 2)) == -1){
     printf("thread failed to initialize\n");
@@ -34,7 +33,7 @@ int main(int argc, char *argv[])
   if((k = mythread_create(function_thread,HIGH_PRIORITY, 2)) == -1){
     printf("thread failed to initialize\n");
     exit(-1);
-  }  
+  }
   if((l = mythread_create(function_thread,LOW_PRIORITY, 2)) == -1){
     printf("thread failed to initialize\n");
     exit(-1);
@@ -44,12 +43,11 @@ int main(int argc, char *argv[])
     printf("thread failed to initialize\n");
     exit(-1);
   }
-  read_disk();
-      
-     
+  //read_disk();
+
   for (a=0; a<10; ++a) {
     for (b=0; b<30000000; ++b);
-  }	
+  }
 
   mythread_exit();	
   
