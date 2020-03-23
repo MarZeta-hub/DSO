@@ -47,8 +47,7 @@ static void idle_function()
 void function_thread(int sec){
 
   while(running->remaining_ticks){
-    /*Simula la interrupción*/
-    //timer_interrupt(sec);
+   /*do something*/
   }
 
   /*Finaliza el hilo*/
@@ -113,6 +112,8 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   int i;
 
   if (!init) { init_mythreadlib(); init=1;}
+
+  /*Si no se habia iniciado la cola de listos lo hace*/
   if (!cola_iniciada){
    cola_listos = queue_new();
    cola_iniciada = 1;
@@ -249,8 +250,11 @@ void timer_interrupt(int sig)
    enable_interrupt();
    /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
-   printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", anterior_tid, next->tid);
-   /**/
+   if(anterior_tid!=0){
+    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", anterior_tid, next->tid);
+   }
+   else printf("*** THREAD READY : SET CONTEXT TO <%i>", next->tid);
+   /*Llamamos al activador*/
    activator(next);
  }
 
