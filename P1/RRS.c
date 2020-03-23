@@ -154,6 +154,7 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   t_state[i].run_env.uc_stack.ss_flags = 0;
   makecontext(&t_state[i].run_env, fun_addr,2,seconds);
   /*Enconlo el nuevo hilo en la cola de listos */
+
   if(t_state[i].priority==LOW_PRIORITY){
     disable_interrupt();
     enqueue(cola_baja_listos,&t_state[i]);
@@ -162,8 +163,25 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   }
   else if(t_state[i].priority==HIGH_PRIORITY){
     disable_interrupt();
-    enqueue(cola_alta_listos,&t_state[i]);
+    sorted_enqueue ( cola_alta_listos,&t_state[i], remaining_ticks);
     enable_interrupt();
+    /*Si se ejecutata un hilo de baja prioridad se cambia por el nuevo de alta*/
+    if(running->priority == LOW_PRIORITY) {
+      TCB* next = scheduler();   
+      int anterior_tid = running->tid;
+       printf("*** THREAD <%i> PREEMTED : SETCONTEXT OF <%i>\n", anterior_tid, next->tid);
+      /*llamamos al activador para que realize el cambio de contexto*/
+      activator(next);
+    }
+
+    /*Si se ejecuta un hilo de alta prioridad pero mas largo que el nuevo se sustituye por este*/
+    else if(running->remaining_ticks > t_state[i].remaining_ticks){
+      TCB* next = scheduler();   
+      int anterior_tid = running->tid;
+       printf("*** SWAPCONTEXT FROM <%i> TO <%i>", anterior_tid, next->tid);
+      /*llamamos al activador para que realize el cambio de contexto*/
+      activator(next);
+    }
     return i;
   }
   else{
@@ -191,7 +209,7 @@ void mythread_exit() {
   int tid = mythread_gettid();
   t_state[tid].state = FREE;
   free(t_state[tid].run_env.uc_stack.ss_sp);
-  if(queue_empty(cola_listos)){
+  if(queue_empty(cola_baja_listos) && queue_empty(cola_alta_listos)){
     printf("*** THREAD %d FINISHED\n", tid);
   }
   TCB* next = scheduler();
@@ -237,13 +255,18 @@ int mythread_gettid(){
 /* SJF para alta prioridad, RR para baja*/
 TCB* scheduler()
 {
-  if(queue_empty(cola_listos)){
+  if(queue_empty(cola_baja_listos)&&queue_empty(cola_alta_listos)){
     printf("mythread_free: No thread in the system\nExiting...\n");
     exit(1);
   }
   /*Desencolo el proceso actual porque va a ser el siguiente en ejecutarse*/
   disable_interrupt();
-  TCB* siguiente = dequeue(cola_listos);
+  if(!queue_empty(cola_alta_listos)){
+    TCB* siguiente = dequeue(cola_alta_listos);
+  }
+  else{
+    TCB* siguiente = dequeue(cola_baja_listos);
+  }
   enable_interrupt();
   return siguiente;
 
@@ -253,32 +276,45 @@ TCB* scheduler()
 /* Timer interrupt */
 void timer_interrupt(int sig)
 {
-   /*reviso si se ha completado su rodaja de tiempo o en el caso de que la cola está 
+   
+   /*Si el proceso es de alta prioridad se sigue ejecutando*/
+   if(running->priority==HIGH_PRIORITY){
+     running->remaining_ticks = running->remaining_ticks - 1;
+     return;
+   }
+    /*reviso si se ha completado su rodaja de tiempo o en el caso de que la cola está 
      vacia, pueda proseguir con su ejecucion*/
-   if(running->priority==LOW_PRIORITY && (running->ticks < QUANTUM_TICKS || queue_empty(cola_alta_listos))){
+   else if((running->priority==LOW_PRIORITY && (running->ticks < QUANTUM_TICKS || queue_empty(cola_alta_listos)))){
       running->ticks = running->ticks + 1;
       running->remaining_ticks = running->remaining_ticks - 1;
       return;
    }
+   
 
    running->ticks = 0;
    /*Encolo el proceso acutal porque no ha acabado*/
    int anterior_tid = running->tid;
+   int prioridad_anterior = running->priority;
    /*Desabilito las interrupciones para poder agregar el proceso a la cola*/
    disable_interrupt();
    /*Devuelvo el proceso a la cola de listos de alta o baja prioridad segun corresponda*/
    if(running->priority==LOW_PRIORITY){
-     enqueue(cola_baja_listos,running);
+    enqueue(cola_baja_listos,running);
    }
    else if(running->priority==HIGH_PRIORITY){
-     enqueue(cola_alta_listos,running);
+    sorted_enqueue ( cola_alta_listos, &t_state[i], remaining_ticks );
    }
    /*Habilito las interrupciones de nuevo*/
    enable_interrupt();
    /*Llamo al planificador para conocer el siguiente proceso*/
    TCB* next = scheduler();
-   printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", anterior_tid, next->tid);
-   /**/
+   if(prioridad_anterior==LOW_PRIORITY && next->priority==HIGH_PRIORITY){
+    printf("*** THREAD <%i> PREEMTED : SETCONTEXT OF <%i>\n", anterior_tid, next->tid);
+   }
+   else{
+    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", anterior_tid, next->tid);
+   }
+   /*llamamos al activador para que realize el cambio de contexto*/
    activator(next);
  }
 
