@@ -259,7 +259,7 @@ TCB* scheduler()
     printf("mythread_free: No thread in the system\nExiting...\n");
     exit(1);
   }
-  /*Desencolo el proceso actual porque va a ser el siguiente en ejecutarse*/
+  /*Desencolo el hilo actual porque va a ser el siguiente en ejecutarse*/
   disable_interrupt();
   if(!queue_empty(cola_alta_listos)){
     TCB* siguiente = dequeue(cola_alta_listos);
@@ -277,7 +277,7 @@ TCB* scheduler()
 void timer_interrupt(int sig)
 {
    
-   /*Si el proceso es de alta prioridad se sigue ejecutando*/
+   /*Si el hilo es de alta prioridad se sigue ejecutando*/
    if(running->priority==HIGH_PRIORITY){
      running->remaining_ticks = running->remaining_ticks - 1;
      return;
@@ -292,12 +292,12 @@ void timer_interrupt(int sig)
    
 
    running->ticks = 0;
-   /*Encolo el proceso acutal porque no ha acabado*/
+   /*Encolo el hilo acutal porque no ha acabado*/
    int anterior_tid = running->tid;
    int prioridad_anterior = running->priority;
-   /*Desabilito las interrupciones para poder agregar el proceso a la cola*/
+   /*Desabilito las interrupciones para poder agregar el hilo a la cola*/
    disable_interrupt();
-   /*Devuelvo el proceso a la cola de listos de alta o baja prioridad segun corresponda*/
+   /*Devuelvo el hilo a la cola de listos de alta o baja prioridad segun corresponda*/
    if(running->priority==LOW_PRIORITY){
     enqueue(cola_baja_listos,running);
    }
@@ -306,7 +306,7 @@ void timer_interrupt(int sig)
    }
    /*Habilito las interrupciones de nuevo*/
    enable_interrupt();
-   /*Llamo al planificador para conocer el siguiente proceso*/
+   /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
    if(prioridad_anterior==LOW_PRIORITY && next->priority==HIGH_PRIORITY){
     printf("*** THREAD <%i> PREEMTED : SETCONTEXT OF <%i>\n", anterior_tid, next->tid);

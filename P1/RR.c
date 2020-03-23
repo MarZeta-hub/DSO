@@ -219,7 +219,7 @@ TCB* scheduler()
     printf("mythread_free: No thread in the system\nExiting...\n");
     exit(1);
   }
-  /*Desencolo el proceso actual porque va a ser el siguiente en ejecutarse*/
+  /*Desencolo el hilo actual porque va a ser el siguiente en ejecutarse*/
   disable_interrupt();
   TCB* siguiente = dequeue(cola_listos);
   enable_interrupt();
@@ -239,15 +239,15 @@ void timer_interrupt(int sig)
       return;
    }
    running->ticks = 0;
-   /*Encolo el proceso acutal porque no ha acabado*/
+   /*Encolo el hilo acutal porque no ha acabado*/
    int anterior_tid = running->tid;
-   /*Desabilito las interrupciones para poder agregar el proceso a la cola*/
+   /*Desabilito las interrupciones para poder agregar el hilo a la cola*/
    disable_interrupt();
-   /*Devuelvo el proceso a la cola de listos*/
+   /*Devuelvo el hilo a la cola de listos*/
    enqueue(cola_listos,running);
    /*Habilito las interrupciones de nuevo*/
    enable_interrupt();
-   /*Llamo al planificador para conocer el siguiente proceso*/
+   /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", anterior_tid, next->tid);
    /**/
