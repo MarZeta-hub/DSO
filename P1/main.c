@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
 
 
   mythread_setpriority(LOW_PRIORITY);
-  if((f = mythread_create(function_thread,HIGH_PRIORITY,5)) == -1){
+  if((f = mythread_create(function_thread,HIGH_PRIORITY,3)) == -1){
       printf("thread failed to initialize\n");
       exit(-1);
   }

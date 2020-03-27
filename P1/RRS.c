@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include "my_io.h"
 
-//#include "mythread.h"
+#include "mythread.h"
 #include "interrupt.h"
 
 #include "queue.h"
@@ -16,14 +16,12 @@ void activator();
 void timer_interrupt(int sig);
 void disk_interrupt(int sig);
 
+
 /* Array of state thread control blocks: the process allows a maximum of N threads */
 static TCB t_state[N];
 
-/*Incializo la cola de prioridad baja de hilos listos*/
-struct queue *cola_baja_listos;
-
-/*Incializo la cola de prioridad alta de hilos listos*/
-struct queue *cola_alta_listos;
+/*Incializo la cola de hilos listos*/
+struct queue *cola_listos;
 
 /* Current running thread */
 static TCB* running;
@@ -35,7 +33,7 @@ static int current = 0;
 static int init=0;
 
 /*Para conocer si la cola de listos está iniciada*/
-static int colas_listos_iniciadas = 0;
+static int cola_iniciada = 0;
 
 /* Thread control block for the idle thread */
 static TCB idle;
@@ -49,9 +47,8 @@ static void idle_function()
 void function_thread(int sec){
 
   while(running->remaining_ticks){
-    /*do something*/
+   /*do something*/
   }
-
   /*Finaliza el hilo*/
   mythread_exit();
 }
@@ -112,18 +109,15 @@ void init_mythreadlib()
 int mythread_create (void (*fun_addr)(),int priority,int seconds)
 {
   int i;
-
   if (!init) { init_mythreadlib(); init=1;}
-  /*Si no se habia iniciado la cola de listos de baja prioridad lo hace*/
-
-  if (!colas_listos_iniciadas){
-   cola_baja_listos = queue_new();
-   cola_alta_listos = queue_new();
-   colas_listos_iniciadas = 1;
+  /*Si no se habia iniciado la cola de listos lo hace*/
+  if (!cola_iniciada){
+   cola_listos = queue_new();
+   cola_iniciada = 1;
   }
-
   for (i=0; i<N; i++)
     if (t_state[i].state == FREE) break;
+
   if (i == N) return(-1);
 
   if(getcontext(&t_state[i].run_env) == -1)
@@ -131,12 +125,13 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
     perror("*** ERROR: getcontext in my_thread_create");
     exit(-1);
   }
-
   t_state[i].state = INIT;
   t_state[i].priority = priority;
   t_state[i].function = fun_addr;
   t_state[i].execution_total_ticks = seconds_to_ticks(seconds);
   t_state[i].remaining_ticks = t_state[i].execution_total_ticks;
+  /*Le damos su rodaja de tiempo para cuando se ejecute*/
+  t_state[i].ticks = QUANTUM_TICKS;
   t_state[i].run_env.uc_stack.ss_sp = (void *)(malloc(STACKSIZE));
   if(t_state[i].run_env.uc_stack.ss_sp == NULL)
   {
@@ -147,45 +142,16 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   t_state[i].run_env.uc_stack.ss_size = STACKSIZE;
   t_state[i].run_env.uc_stack.ss_flags = 0;
   makecontext(&t_state[i].run_env, fun_addr,2,seconds);
-
-  if(t_state[i].priority != LOW_PRIORITY && t_state[i].priority != HIGH_PRIORITY){
-    perror("*** ERROR: prioridad no valida");
-    exit(-1);
-  }
-  /*Si el nuevo hilo es de baja prioridad lo encolo en la lista de listos de baja prioridad */
-  if(t_state[i].priority == LOW_PRIORITY){
-    disable_interrupt();
-    disable_disk_interrupt();
-    enqueue(cola_baja_listos,&t_state[i]);
-    enable_disk_interrupt();
-    enable_interrupt();
-  }
-  else if(t_state[i].priority == HIGH_PRIORITY){
-    disable_interrupt();
-    disable_disk_interrupt();
-    /*Encolamos ordenadamente el nuevo hilo en la cola de alta prioridad*/
-    sorted_enqueue (cola_alta_listos,&t_state[i], t_state[i].remaining_ticks);
-    enable_disk_interrupt();
-    enable_interrupt();
-    /*Si se ejecutata un hilo de baja prioridad se cambia por el nuevo de alta*/
-    if(running->priority == LOW_PRIORITY) {
-        TCB* next = scheduler();
-        int anterior_tid = running->tid;
-        printf("*** THREAD <%i> PREEMTED : SETCONTEXT OF <%i>\n", anterior_tid, next->tid);
-        /*llamamos al activador para que realize el cambio de contexto*/
-        activator(next);
-    }
-    /*Si se ejecuta un hilo de alta prioridad pero mas largo que el nuevo se sustituye por este*/
-    else if(running->remaining_ticks > t_state[i].remaining_ticks){
-        TCB* next = scheduler();
-        int anterior_tid = running->tid;
-        printf("*** SWAPCONTEXT FROM <%i> TO <%i>", anterior_tid, next->tid);
-        /*llamamos al activador para que realize el cambio de contexto*/
-        activator(next);
-    }
-  }
-    return i;
-  }
+  /*Deshabilito las interrupciones*/
+  disable_interrupt();
+  disable_disk_interrupt();
+  /*Encolo el hilo en la cola de listos*/
+  enqueue(cola_listos,&t_state[i]);
+  /*Habilito las interrupciones*/
+  enable_disk_interrupt();
+  enable_interrupt();
+  return i;
+}
 /****** End my_thread_create() ******/
 
 /* Read disk syscall */
@@ -202,20 +168,26 @@ void disk_interrupt(int sig)
 
 
 /* Free terminated thread and exits */
-void mythread_exit() {
+void mythread_exit()
+{
+  /*Obtengo el tid del proceso actual*/
   int tid = mythread_gettid();
+  /*Y lo libero*/
   t_state[tid].state = FREE;
   free(t_state[tid].run_env.uc_stack.ss_sp);
-  if(queue_empty(cola_baja_listos) && queue_empty(cola_alta_listos)){
+  /*En el caso de que el hilo fuera el último finalizado*/
+  if(queue_empty(cola_listos)){
     printf("*** THREAD %d FINISHED\n", tid);
   }
+  /*Llamo al planificador para conocer el siguiente hilo*/
   TCB* next = scheduler();
-  printf ("*** THREAD  <%i> TERMINATED: SETCONTEXT  OF <%i>\n",tid, next->tid );
+  /*Llamo al activador para cambiar de contexto*/
   activator(next);
 }
 
 
-void mythread_timeout(int tid) {
+void mythread_timeout(int tid)
+{
     printf("*** THREAD %d EJECTED\n", tid);
     t_state[tid].state = FREE;
     free(t_state[tid].run_env.uc_stack.ss_sp);
@@ -243,7 +215,8 @@ int mythread_getpriority(int priority)
 
 
 /* Get the current thread id.  */
-int mythread_gettid(){
+int mythread_gettid()
+{
   if (!init) { init_mythreadlib(); init=1;}
   return current;
 }
@@ -252,19 +225,21 @@ int mythread_gettid(){
 /* SJF para alta prioridad, RR para baja*/
 TCB* scheduler()
 {
-  if(queue_empty(cola_baja_listos)&&queue_empty(cola_alta_listos)){
+  /*Finalizo*/
+  if(queue_empty(cola_listos)){
     printf("mythread_free: No thread in the system\nExiting...\n");
+    printf("*** FINISH\n");
     exit(1);
   }
-  /*Desencolo el hilo actual porque va a ser el siguiente en ejecutarse*/
+  /*Deshabilito la interrupción de tiempo */
   disable_interrupt();
-  TCB* siguiente;
-  if(!queue_empty(cola_alta_listos)){
-   siguiente = dequeue(cola_alta_listos);
-  }
-  else{
-    siguiente = dequeue(cola_baja_listos);
-  }
+  /*Deshabilito la interrupción de disco*/
+  disable_disk_interrupt();
+  /*Desencolo el hilo siguiente*/
+  TCB* siguiente = dequeue(cola_listos);
+  /*Habilito la interrupción de disco*/
+  enable_disk_interrupt();
+  /*Habilito la interrupción de tiempo*/
   enable_interrupt();
   return siguiente;
 }
@@ -273,70 +248,49 @@ TCB* scheduler()
 /* Timer interrupt */
 void timer_interrupt(int sig)
 {
-   /*Si el hilo es de alta prioridad se sigue ejecutando*/
-   if(running->priority==HIGH_PRIORITY){
-     running->remaining_ticks = running->remaining_ticks - 1;
-     return;
-   }
-   /*reviso si se ha completado su rodaja de tiempo o en el caso de que la cola está 
-   vacia, pueda proseguir con su ejecucion*/
-   else if((running->priority==LOW_PRIORITY && (running->ticks < QUANTUM_TICKS || queue_empty(cola_alta_listos)))){
-      running->ticks = running->ticks + 1;
+   /*Reviso si se ha completado su rodaja de tiempo o en el caso de que la cola está 
+     vacia, pueda proseguir con su ejecucion*/
+   if(running->ticks || queue_empty(cola_listos)){
+   /*Para caso de pruebas, si se salta el while de tiempo restante != 0 de la función*/
+      if(running->remaining_ticks < 1){
+         mythread_timeout(running->tid);
+      }
+      running->ticks = running->ticks - 1;
       running->remaining_ticks = running->remaining_ticks - 1;
       return;
    }
-   running->ticks = 0;
-   /*Encolo el hilo acutal porque no ha acabado*/
-   int anterior_tid = running->tid;
-   int prioridad_anterior = running->priority;
+   running->ticks = QUANTUM_TICKS;
    /*Desabilito las interrupciones para poder agregar el hilo a la cola*/
    disable_interrupt();
    disable_disk_interrupt();
-   /*Devuelvo el hilo a la cola de listos de alta o baja prioridad segun corresponda*/
-   if(running->priority == LOW_PRIORITY){
-      enqueue(cola_baja_listos,running);
-   }
-
-  /*else if(running->priority==HIGH_PRIORITY){
-    sorted_enqueue ( cola_alta_listos, running, running->remaining_ticks );
-   }*/
-
+   /*Devuelvo el hilo a la cola de listos*/
+   enqueue(cola_listos,running);
    /*Habilito las interrupciones de nuevo*/
-   enable_interrupt();
    enable_disk_interrupt();
+   enable_interrupt();
    /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
-   if(prioridad_anterior == LOW_PRIORITY && next->priority == HIGH_PRIORITY && anterior_tid != 0){
-    printf("*** THREAD <%i> PREEMTED : SETCONTEXT OF <%i>\n", anterior_tid, next->tid);
-   }
-   else if(anterior_tid != 0){
-    printf("*** THREAD READY : SET CONTEXT TO <%i>", next->tid);
-   }
-   else{
-    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", anterior_tid, next->tid);
-   }
-   /*llamamos al activador para que realize el cambio de contexto*/
+   /*Llamamos al activador*/
    activator(next);
  }
-
 
 /* Activator */
 void activator(TCB* next)
 {
-  TCB *oldRunning = running;
-  current = running->tid;
+  /*Creo un nuevo TCB para guardar el hilo anterior*/
+  TCB* oldRunning = running;
+  /*Cambio el hilo ejecutando al siguiente*/
   running = next;
+  /*Cambio el tid de current*/
+  current = running->tid;
   if(oldRunning->state == FREE){
-  /*Cambio de contexto por el  contexto seleccionado en el planificador*/
+    /*Inicio el contexto siguiente sin guardar el anterior*/
     printf ("*** THREAD <%i> TERMINATED: SETCONTEXT OF <%i>\n", oldRunning->tid, next->tid );
     setcontext (&(next->run_env));
-    printf("mythread_free: After setcontext, should never get here!!...
-  }else{
-  /*Cambio de contexto por le contexto seleccionado en el planificador*/
-    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", oldRunning->tid, next->tid);
-    setcontext (&(next->run_env));
     printf("mythread_free: After setcontext, should never get here!!...\n");
+  }else{
+    /*Guardo el contexto anterior y inicio el siguiente*/
+    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", oldRunning->tid, next->tid);
+    swapcontext(&(oldRunning->run_env), &(next->run_env));
   }
 }
-
-
