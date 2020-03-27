@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include "my_io.h"
 
-//#include "mythread.h"
+#include "mythread.h"
 #include "interrupt.h"
 
 #include "queue.h"
@@ -49,7 +49,6 @@ void function_thread(int sec){
   while(running->remaining_ticks){
    /*do something*/
   }
-
   /*Finaliza el hilo*/
   mythread_exit();
 }
@@ -110,9 +109,7 @@ void init_mythreadlib()
 int mythread_create (void (*fun_addr)(),int priority,int seconds)
 {
   int i;
-
   if (!init) { init_mythreadlib(); init=1;}
-
   /*Si no se habia iniciado la cola de listos lo hace*/
   if (!cola_iniciada){
    cola_listos = queue_new();
@@ -128,7 +125,6 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
     perror("*** ERROR: getcontext in my_thread_create");
     exit(-1);
   }
-
   t_state[i].state = INIT;
   t_state[i].priority = priority;
   t_state[i].function = fun_addr;
@@ -144,12 +140,12 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   t_state[i].run_env.uc_stack.ss_size = STACKSIZE;
   t_state[i].run_env.uc_stack.ss_flags = 0;
   makecontext(&t_state[i].run_env, fun_addr,2,seconds);
-  /* Enconlo el nuevo hilo en la cola de listos, además de que
-     inhabilito la entrada de interrupciones mientras se añade el
-     hilo */
+  /*Deshabilito las interrupciones*/
   disable_interrupt();
   disable_disk_interrupt();
+  /*Encolo el hilo en la cola de listos*/
   enqueue(cola_listos,&t_state[i]);
+  /*Habilito las interrupciones*/
   enable_disk_interrupt();
   enable_interrupt();
   return i;
@@ -170,19 +166,26 @@ void disk_interrupt(int sig)
 
 
 /* Free terminated thread and exits */
-void mythread_exit() {
+void mythread_exit()
+{
+  /*Obtengo el tid del proceso actual*/
   int tid = mythread_gettid();
+  /*Y lo libero*/
   t_state[tid].state = FREE;
   free(t_state[tid].run_env.uc_stack.ss_sp);
+  /*En el caso de que el hilo fuera el último finalizado*/
   if(queue_empty(cola_listos)){
     printf("*** THREAD %d FINISHED\n", tid);
   }
+  /*Llamo al planificador para conocer el siguiente hilo*/
   TCB* next = scheduler();
+  /*Llamo al activador para cambiar de contexto*/
   activator(next);
 }
 
 
-void mythread_timeout(int tid) {
+void mythread_timeout(int tid)
+{
     printf("*** THREAD %d EJECTED\n", tid);
     t_state[tid].state = FREE;
     free(t_state[tid].run_env.uc_stack.ss_sp);
@@ -210,7 +213,8 @@ int mythread_getpriority(int priority)
 
 
 /* Get the current thread id.  */
-int mythread_gettid(){
+int mythread_gettid()
+{
   if (!init) { init_mythreadlib(); init=1;}
   return current;
 }
@@ -219,17 +223,23 @@ int mythread_gettid(){
 /* SJF para alta prioridad, RR para baja*/
 TCB* scheduler()
 {
+  /*Finalizo*/
   if(queue_empty(cola_listos)){
     printf("mythread_free: No thread in the system\nExiting...\n");
     printf("*** FINISH\n");
     exit(1);
   }
-  /*Desencolo el hilo actual porque va a ser el siguiente en ejecutarse*/
+  /*Deshabilito la interrupción de tiempo */
   disable_interrupt();
+  /*Deshabilito la interrupción de disco*/
+  disable_disk_interrupt();
+  /*Desencolo el hilo siguiente*/
   TCB* siguiente = dequeue(cola_listos);
+  /*Habilito la interrupción de disco*/
+  enable_disk_interrupt();
+  /*Habilito la interrupción de tiempo*/
   enable_interrupt();
   return siguiente;
-
 }
 
 
@@ -261,19 +271,20 @@ void timer_interrupt(int sig)
 /* Activator */
 void activator(TCB* next)
 {
+  /*Creo un nuevo TCB para guardar el hilo anterior*/
   TCB* oldRunning = running;
+  /*Cambio el hilo ejecutando al siguiente*/
   running = next;
+  /*Cambio el tid de current*/
   current = running->tid;
   if(oldRunning->state == FREE){
-    /*Cambio de contexto por el  contexto seleccionado en el planificador*/
+    /*Inicio el contexto siguiente sin guardar el anterior*/
     printf ("*** THREAD <%i> TERMINATED: SETCONTEXT OF <%i>\n", oldRunning->tid, next->tid );
     setcontext (&(next->run_env));
     printf("mythread_free: After setcontext, should never get here!!...\n");
   }else{
+    /*Guardo el contexto anterior y inicio el siguiente*/
     printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", oldRunning->tid, next->tid);
     swapcontext(&(oldRunning->run_env), &(next->run_env));
   }
-
 }
-
-
