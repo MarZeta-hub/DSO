@@ -16,7 +16,6 @@ void activator();
 void timer_interrupt(int sig);
 void disk_interrupt(int sig);
 
-
 /* Array of state thread control blocks: the process allows a maximum of N threads */
 static TCB t_state[N];
 
@@ -36,10 +35,7 @@ static int current = 0;
 static int init=0;
 
 /*Para conocer si la cola de listos está iniciada*/
-static int cola_baja_iniciada = 0;
-
-/*Para conocer si la cola de listos está iniciada*/
-static int cola_alta_iniciada = 0;
+static int colas_listos_iniciadas = 0;
 
 /* Thread control block for the idle thread */
 static TCB idle;
@@ -119,19 +115,15 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
 
   if (!init) { init_mythreadlib(); init=1;}
   /*Si no se habia iniciado la cola de listos de baja prioridad lo hace*/
-  if (!cola_baja_iniciada){
+
+  if (!colas_listos_iniciadas){
    cola_baja_listos = queue_new();
-   cola_baja_iniciada = 1;
-  }
-  /*Si no se habia iniciado la cola de listos de alta prioridad lo hace*/
-  if (!cola_alta_iniciada){
    cola_alta_listos = queue_new();
-   cola_alta_iniciada = 1;
+   colas_listos_iniciadas = 1;
   }
 
   for (i=0; i<N; i++)
     if (t_state[i].state == FREE) break;
-
   if (i == N) return(-1);
 
   if(getcontext(&t_state[i].run_env) == -1)
@@ -155,44 +147,45 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   t_state[i].run_env.uc_stack.ss_size = STACKSIZE;
   t_state[i].run_env.uc_stack.ss_flags = 0;
   makecontext(&t_state[i].run_env, fun_addr,2,seconds);
-  
-  /*Si el nuevo hilo es de baja prioridad lo encolo en la lista de listos de baja prioridad */
-  if(t_state[i].priority==LOW_PRIORITY){
-    disable_interrupt();
-    enqueue(cola_baja_listos,&t_state[i]);
-    enable_interrupt();
-    return i;
-  }
 
-  else if(t_state[i].priority==HIGH_PRIORITY){
-    disable_interrupt();
-    /*Encolamos ordenadamente el nuevo hilo en la cola de alta prioridad*/
-    sorted_enqueue ( cola_alta_listos,&t_state[i], t_state[i].remaining_ticks);
-    enable_interrupt();
-    /*Si se ejecutata un hilo de baja prioridad se cambia por el nuevo de alta*/
-    if(running->priority == LOW_PRIORITY) {
-      TCB* next = scheduler();   
-      int anterior_tid = running->tid;
-       printf("*** THREAD <%i> PREEMTED : SETCONTEXT OF <%i>\n", anterior_tid, next->tid);
-      /*llamamos al activador para que realize el cambio de contexto*/
-      activator(next);
-    }
-
-    /*Si se ejecuta un hilo de alta prioridad pero mas largo que el nuevo se sustituye por este*/
-    else if(running->remaining_ticks > t_state[i].remaining_ticks){
-      TCB* next = scheduler();   
-      int anterior_tid = running->tid;
-       printf("*** SWAPCONTEXT FROM <%i> TO <%i>", anterior_tid, next->tid);
-      /*llamamos al activador para que realize el cambio de contexto*/
-      activator(next);
-    }
-    return i;
-  }
-  else{
+  if(t_state[i].priority != LOW_PRIORITY && t_state[i].priority != HIGH_PRIORITY){
     perror("*** ERROR: prioridad no valida");
     exit(-1);
   }
-}
+  /*Si el nuevo hilo es de baja prioridad lo encolo en la lista de listos de baja prioridad */
+  if(t_state[i].priority == LOW_PRIORITY){
+    disable_interrupt();
+    disable_disk_interrupt();
+    enqueue(cola_baja_listos,&t_state[i]);
+    enable_disk_interrupt();
+    enable_interrupt();
+  }
+  else if(t_state[i].priority == HIGH_PRIORITY){
+    disable_interrupt();
+    disable_disk_interrupt();
+    /*Encolamos ordenadamente el nuevo hilo en la cola de alta prioridad*/
+    sorted_enqueue (cola_alta_listos,&t_state[i], t_state[i].remaining_ticks);
+    enable_disk_interrupt();
+    enable_interrupt();
+    /*Si se ejecutata un hilo de baja prioridad se cambia por el nuevo de alta*/
+    if(running->priority == LOW_PRIORITY) {
+        TCB* next = scheduler();
+        int anterior_tid = running->tid;
+        printf("*** THREAD <%i> PREEMTED : SETCONTEXT OF <%i>\n", anterior_tid, next->tid);
+        /*llamamos al activador para que realize el cambio de contexto*/
+        activator(next);
+    }
+    /*Si se ejecuta un hilo de alta prioridad pero mas largo que el nuevo se sustituye por este*/
+    else if(running->remaining_ticks > t_state[i].remaining_ticks){
+        TCB* next = scheduler();   
+        int anterior_tid = running->tid;
+        printf("*** SWAPCONTEXT FROM <%i> TO <%i>", anterior_tid, next->tid);
+        /*llamamos al activador para que realize el cambio de contexto*/
+        activator(next);
+    }
+  }
+    return i;
+  }
 /****** End my_thread_create() ******/
 
 /* Read disk syscall */
@@ -265,22 +258,21 @@ TCB* scheduler()
   }
   /*Desencolo el hilo actual porque va a ser el siguiente en ejecutarse*/
   disable_interrupt();
+  TCB* siguiente;
   if(!queue_empty(cola_alta_listos)){
-    TCB* siguiente = dequeue(cola_alta_listos);
+   siguiente = dequeue(cola_alta_listos);
   }
   else{
-    TCB* siguiente = dequeue(cola_baja_listos);
+    siguiente = dequeue(cola_baja_listos);
   }
   enable_interrupt();
   return siguiente;
-
 }
 
 
 /* Timer interrupt */
 void timer_interrupt(int sig)
 {
-   
    /*Si el hilo es de alta prioridad se sigue ejecutando*/
    if(running->priority==HIGH_PRIORITY){
      running->remaining_ticks = running->remaining_ticks - 1;
@@ -293,8 +285,6 @@ void timer_interrupt(int sig)
       running->remaining_ticks = running->remaining_ticks - 1;
       return;
    }
-   
-
    running->ticks = 0;
    /*Encolo el hilo acutal porque no ha acabado*/
    int anterior_tid = running->tid;
@@ -324,6 +314,7 @@ void timer_interrupt(int sig)
    /*llamamos al activador para que realize el cambio de contexto*/
    activator(next);
  }
+
 
 /* Activator */
 void activator(TCB* next)

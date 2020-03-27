@@ -150,6 +150,7 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   disable_interrupt();
   disable_disk_interrupt();
   enqueue(cola_listos,&t_state[i]);
+  t_state[i].state = WAITING;
   enable_disk_interrupt();
   enable_interrupt();
   return i;
@@ -178,6 +179,7 @@ void mythread_exit() {
     printf("*** THREAD %d FINISHED\n", tid);
   }
   TCB* next = scheduler();
+  printf ("*** THREAD  <%i> TERMINATED: SETCONTEXT  OF <%i>\n",tid, next->tid );
   activator(next);
 }
 
@@ -221,7 +223,6 @@ TCB* scheduler()
 {
   if(queue_empty(cola_listos)){
     printf("mythread_free: No thread in the system\nExiting...\n");
-    printf("*** FINISH\n");
     exit(1);
   }
   /*Desencolo el hilo actual porque va a ser el siguiente en ejecutarse*/
@@ -238,22 +239,28 @@ void timer_interrupt(int sig)
 {
    /*reviso si se ha completado su rodaja de tiempo o en el caso de que la cola está 
      vacia, pueda proseguir con su ejecucion*/
-   if(running->ticks || queue_empty(cola_listos)){
-      running->ticks = running->ticks - 1;
+   if(running->ticks < QUANTUM_TICKS || queue_empty(cola_listos)){
+      running->ticks = running->ticks + 1;
       running->remaining_ticks = running->remaining_ticks - 1;
       return;
    }
-   running->ticks = QUANTUM_TICKS;
+   running->ticks = 0;
+   /*Encolo el hilo acutal porque no ha acabado*/
+   int anterior_tid = running->tid;
    /*Desabilito las interrupciones para poder agregar el hilo a la cola*/
    disable_interrupt();
-   disable_disk_interrupt();
    /*Devuelvo el hilo a la cola de listos*/
    enqueue(cola_listos,running);
    /*Habilito las interrupciones de nuevo*/
-   enable_disk_interrupt();
    enable_interrupt();
    /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
+   if(anterior_tid!=0){
+    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", anterior_tid, next->tid);
+   }
+   else{
+    printf("*** THREAD READY : SET CONTEXT TO <%i>\n", next->tid);
+   }
    /*Llamamos al activador*/
    activator(next);
  }
@@ -261,19 +268,13 @@ void timer_interrupt(int sig)
 /* Activator */
 void activator(TCB* next)
 {
-  TCB* oldRunning = running;
+
+
   running = next;
   current = running->tid;
-  if(oldRunning->state == FREE){
-    /*Cambio de contexto por el  contexto seleccionado en el planificador*/
-    printf ("*** THREAD <%i> TERMINATED: SETCONTEXT OF <%i>\n", oldRunning->tid, next->tid );
-    setcontext (&(next->run_env));
-    printf("mythread_free: After setcontext, should never get here!!...\n");
-  }else{
-    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", oldRunning->tid, next->tid);
-    swapcontext(&(oldRunning->run_env), &(next->run_env));
-  }
-
+  /*Cambio de contexto por el  contexto seleccionado en el planificador*/
+  setcontext (&(next->run_env));
+  printf("mythread_free: After setcontext, should never get here!!...\n");
 }
 
 
