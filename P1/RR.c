@@ -262,13 +262,13 @@ void timer_interrupt(int sig)
       running->remaining_ticks = running->remaining_ticks - 1;
       return;
    }
+   /* Le devuelvo su QUANTUM */
+   running->ticks = QUANTUM_TICKS;
    //Para que IDLE no se encole
    if(current != 0) {
    /* Dishabilito las interrupciones */
    disable_interrupt();
    disable_disk_interrupt();
-   /* Le devuelvo su QUANTUM */
-   running->ticks = QUANTUM_TICKS;
    /* Encolo el proceso de nuevo a la cola de listos */
    enqueue(cola_listos,running);
    /*Habilito las interrupciones */

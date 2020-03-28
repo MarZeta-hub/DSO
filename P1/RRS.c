@@ -5,37 +5,44 @@
 #include <ucontext.h>
 #include <unistd.h>
 #include "my_io.h"
-
 #include "mythread.h"
 #include "interrupt.h"
-
 #include "queue.h"
 
+/*Planificador que tiene como salida el siguiente hilo 
+  a ejecutar*/
 TCB* scheduler();
+
+/*El activador que cambia de contexto entre hilos*/
 void activator();
+
+/*El interruptor de tiempo, verifica la rodaja de tiempo*/
 void timer_interrupt(int sig);
+
+/*Interruptor de disco: simula una interrupción de hw*/
 void disk_interrupt(int sig);
 
-
-/* Array of state thread control blocks: the process allows a maximum of N threads */
+/*Array de estados de TCB: coloca cada hilo en una posición
+  del array, el cual será su tid*/
 static TCB t_state[N];
 
-/*Incializo la cola de hilos listos*/
-struct queue *cola_listos;
+/*Incializo las colas de hilos listos*/
+struct queue *cola_listos_alta;
+struct queue *cola_listos_baja;
 
-/* Current running thread */
+/* Es el hilo actual ejecutándose */
 static TCB* running;
 
 /*Tid del hilo actual*/
 static int current = 0;
 
-/* Variable indicating if the library is initialized (init == 1) or not (init == 0) */
+/* Indica si la libreria está inciada (init=1) o no (init=0) */
 static int init=0;
 
 /*Para conocer si la cola de listos está iniciada*/
 static int cola_iniciada = 0;
 
-/* Thread control block for the idle thread */
+/* TCB controlador del hilo ocioso*/
 static TCB idle;
 
 
@@ -58,25 +65,30 @@ void function_thread(int sec){
 void init_mythreadlib()
 {
   int i;
-  /* Create context for the idle thread */
+  /*Si no se habia iniciado la cola de listos lo hace*/
+  if (!cola_iniciada){
+   cola_listos_baja = queue_new();
+   cola_listos_alta = queue_new();
+   cola_iniciada = 1;
+  }
+
+  /* Crea el contexto para le hilo IDLE */
   if(getcontext(&idle.run_env) == -1)
   {
     perror("*** ERROR: getcontext in init_thread_lib");
     exit(-1);
   }
-
+  /*Crea los parámetros para el hilo IDLE*/
   idle.state = IDLE;
   idle.priority = SYSTEM;
   idle.function = idle_function;
   idle.run_env.uc_stack.ss_sp = (void *)(malloc(STACKSIZE));
   idle.tid = -1;
-
   if(idle.run_env.uc_stack.ss_sp == NULL)
   {
     printf("*** ERROR: thread failed to get stack space\n");
     exit(-1);
   }
-
   idle.run_env.uc_stack.ss_size = STACKSIZE;
   idle.run_env.uc_stack.ss_flags = 0;
   idle.ticks = QUANTUM_TICKS;
@@ -99,37 +111,33 @@ void init_mythreadlib()
 
   t_state[0].tid = 0;
   running = &t_state[0];
-  //Initialize disk and clock interrupts
-  init_disk_interrupt();
+  //Inicializa las interrupciones
   init_interrupt();
+  init_disk_interrupt();
 }
 
-
-/* Create and intialize a new thread with body fun_addr and one integer argument */ 
+/*Crea y inicializa un nuevo hilo con una función determinada y un tid específico*/
 int mythread_create (void (*fun_addr)(),int priority,int seconds)
 {
   int i;
   if (!init) { init_mythreadlib(); init=1;}
-  /*Si no se habia iniciado la cola de listos lo hace*/
-  if (!cola_iniciada){
-   cola_listos = queue_new();
-   cola_iniciada = 1;
-  }
+  /*Busca un hueco que este libre para que sea el tid*/
   for (i=0; i<N; i++)
     if (t_state[i].state == FREE) break;
-
   if (i == N) return(-1);
-
   if(getcontext(&t_state[i].run_env) == -1)
   {
     perror("*** ERROR: getcontext in my_thread_create");
     exit(-1);
   }
-  t_state[i].state = INIT;
-  t_state[i].priority = priority;
-  t_state[i].function = fun_addr;
+  t_state[i].state = INIT;        //Estado listo para ejecutar
+  t_state[i].priority = priority; //Prioridad otorgada por parámetro
+  t_state[i].function = fun_addr; //Función otorgada por parámetro
   t_state[i].execution_total_ticks = seconds_to_ticks(seconds);
+  //convierto los segundos dados por ticks
   t_state[i].remaining_ticks = t_state[i].execution_total_ticks;
+  //Los ticks que le faltan para acabar serás los ticks totales
+
   /*Le damos su rodaja de tiempo para cuando se ejecute*/
   t_state[i].ticks = QUANTUM_TICKS;
   t_state[i].run_env.uc_stack.ss_sp = (void *)(malloc(STACKSIZE));
@@ -138,36 +146,49 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
     printf("*** ERROR: thread failed to get stack space\n");
     exit(-1);
   }
-  t_state[i].tid = i;
+  t_state[i].tid = i; //Su tid será el encontrado anteriormente
   t_state[i].run_env.uc_stack.ss_size = STACKSIZE;
   t_state[i].run_env.uc_stack.ss_flags = 0;
+
+  /*Creamos el contexto del hilo*/
   makecontext(&t_state[i].run_env, fun_addr,2,seconds);
+
+  TCB *hilo_a_encolar = &t_state[i];
+  /*HIGH priority es 1 y LOW_PRIORITY es 0*/
+  int prioridad = hilo_a_encolar->priority;
   /*Deshabilito las interrupciones*/
   disable_interrupt();
   disable_disk_interrupt();
   /*Encolo el hilo en la cola de listos*/
-  enqueue(cola_listos,&t_state[i]);
+  switch (prioridad) {
+        case LOW_PRIORITY:
+             enqueue(cola_listos_baja,hilo_a_encolar);
+             break;
+        case HIGH_PRIORITY:
+             sorted_enqueue(cola_listos_alta, hilo_a_encolar, hilo_a_encolar->remaining_ticks);
+             break;
+        default:
+             perror("La prioridad no es ni baja ni alta");
+             return -1;
+  }
   /*Habilito las interrupciones*/
   enable_disk_interrupt();
   enable_interrupt();
   return i;
 }
-/****** End my_thread_create() ******/
+/****** Fin de la Creación del Hilo  ******/
 
-/* Read disk syscall */
+/* Llamada a la lectura de disco*/
 int read_disk()
 {
    return 1;
 }
 
-/* Disk interrupt  */
-void disk_interrupt(int sig)
-{
-
-}
+/* Interrupción de disco*/
+void disk_interrupt(int sig){}
 
 
-/* Free terminated thread and exits */
+/* Libera el hilo terminado y llama al planificador y al activador */
 void mythread_exit()
 {
   /*Obtengo el tid del proceso actual*/
@@ -176,7 +197,7 @@ void mythread_exit()
   t_state[tid].state = FREE;
   free(t_state[tid].run_env.uc_stack.ss_sp);
   /*En el caso de que el hilo fuera el último finalizado*/
-  if(queue_empty(cola_listos)){
+  if(queue_empty(cola_listos_baja) && queue_empty(cola_listos_alta)){
     printf("*** THREAD %d FINISHED\n", tid);
   }
   /*Llamo al planificador para conocer el siguiente hilo*/
@@ -185,7 +206,7 @@ void mythread_exit()
   activator(next);
 }
 
-
+/*Elimina el hilo si tiene problemas*/
 void mythread_timeout(int tid)
 {
     printf("*** THREAD %d EJECTED\n", tid);
@@ -196,7 +217,7 @@ void mythread_timeout(int tid)
 }
 
 
-/* Sets the priority of the calling thread */
+/* Selecciona la prioridad del hilo */
 void mythread_setpriority(int priority)
 {
   int tid = mythread_gettid();
@@ -206,7 +227,8 @@ void mythread_setpriority(int priority)
   }
 }
 
-/* Returns the priority of the calling thread */
+
+/* Devuelve la prioridad de la hilo */
 int mythread_getpriority(int priority)
 {
   int tid = mythread_gettid();
@@ -214,7 +236,7 @@ int mythread_getpriority(int priority)
 }
 
 
-/* Get the current thread id.  */
+/* Obtiene el id del hilo actual */
 int mythread_gettid()
 {
   if (!init) { init_mythreadlib(); init=1;}
@@ -225,49 +247,58 @@ int mythread_gettid()
 /* SJF para alta prioridad, RR para baja*/
 TCB* scheduler()
 {
-  /*Finalizo*/
-  if(queue_empty(cola_listos)){
+  /* Finalizo el programa si no quedan hilos en la cola */
+  if( (queue_empty(cola_listos_baja)) && (queue_empty(cola_listos_alta)) ){
     printf("mythread_free: No thread in the system\nExiting...\n");
     printf("*** FINISH\n");
     exit(1);
   }
-  /*Deshabilito la interrupción de tiempo */
+
+  TCB* siguiente;
+  /* Deshabilito las interrupciones */
   disable_interrupt();
-  /*Deshabilito la interrupción de disco*/
   disable_disk_interrupt();
-  /*Desencolo el hilo siguiente*/
-  TCB* siguiente = dequeue(cola_listos);
-  /*Habilito la interrupción de disco*/
+  /* Desencolo el hilo siguiente*/
+  if( !queue_empty(cola_listos_alta)){
+   siguiente = dequeue(cola_listos_alta);
+  }
+  else{
+   siguiente = dequeue(cola_listos_baja);
+  }
+  /* Habilito las interrpciones */
   enable_disk_interrupt();
-  /*Habilito la interrupción de tiempo*/
   enable_interrupt();
+  /*Devuelvo el proceso obtenido*/
   return siguiente;
 }
-
 
 /* Timer interrupt */
 void timer_interrupt(int sig)
 {
-   /*Reviso si se ha completado su rodaja de tiempo o en el caso de que la cola está 
-     vacia, pueda proseguir con su ejecucion*/
-   if(running->ticks || queue_empty(cola_listos)){
-   /*Para caso de pruebas, si se salta el while de tiempo restante != 0 de la función*/
-      if(running->remaining_ticks < 1){
-         mythread_timeout(running->tid);
-      }
+   running->remaining_ticks = running->remaining_ticks - 1;
+   if(running->priority == HIGH_PRIORITY){
+     return;
+   }
+   /*Reviso si se ha completado su rodaja de tiempo o en el
+     caso de que la cola está vacia, pueda proseguir con
+     su ejecucion*/
+   if( (running->ticks >0) || (queue_empty(cola_listos_baja))) {
       running->ticks = running->ticks - 1;
-      running->remaining_ticks = running->remaining_ticks - 1;
       return;
    }
+   /* Le devuelvo su QUANTUM */
    running->ticks = QUANTUM_TICKS;
-   /*Desabilito las interrupciones para poder agregar el hilo a la cola*/
+   //Para que IDLE no se encole
+   if(current != 0) {
+   /* Dishabilito las interrupciones */
    disable_interrupt();
    disable_disk_interrupt();
-   /*Devuelvo el hilo a la cola de listos*/
-   enqueue(cola_listos,running);
-   /*Habilito las interrupciones de nuevo*/
+   /* Encolo el proceso de nuevo a la cola de listos */
+   enqueue(cola_listos_baja,running);
+   /*Habilito las interrupciones */
    enable_disk_interrupt();
    enable_interrupt();
+   }
    /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
    /*Llamamos al activador*/
