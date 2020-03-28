@@ -296,8 +296,13 @@ void activator(TCB* next)
     setcontext (&(next->run_env));
     printf("mythread_free: After setcontext, should never get here!!...\n");
   }else{
+    if (oldRunning->tid != 0){
+       printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", oldRunning->tid, next->tid);
+    }
+    else{
+       printf ("*** THREAD READY : SET CONTEXT TO <%i>\n",next->tid);
+    }
     /*Guardo el contexto anterior y inicio el siguiente*/
-    printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", oldRunning->tid, next->tid);
     swapcontext(&(oldRunning->run_env), &(next->run_env));
   }
 }
