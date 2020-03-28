@@ -4,13 +4,11 @@
 #include <stdlib.h>
 #include <ucontext.h>
 #include <unistd.h>
-
 #include "mythread.h"
 
 
 //Each thread executes this function
 extern void function_thread(int sec);
-
 
 
 int main(int argc, char *argv[])
@@ -19,12 +17,13 @@ int main(int argc, char *argv[])
 
   //high
   mythread_setpriority(LOW_PRIORITY);
-  if((f = mythread_create(function_thread,HIGH_PRIORITY,5)) == -1){
+  if((f = mythread_create(function_thread,HIGH_PRIORITY,3)) == -1){
       printf("thread failed to initialize\n");
       exit(-1);
   }
-  //read_disk();
-  //read_disk();
+
+  read_disk();
+  read_disk();
 
   if((j = mythread_create(function_thread,HIGH_PRIORITY, 7)) == -1){
     printf("thread failed to initialize\n");
@@ -40,16 +39,18 @@ int main(int argc, char *argv[])
     exit(-1);
   }
 
+  read_disk();
+
   if((m = mythread_create(function_thread,HIGH_PRIORITY, 2)) == -1){
     printf("thread failed to initialize\n");
     exit(-1);
   }
-  //read_disk();
+
+
   for (a=0; a<10; ++a) {
     for (b=0; b<30000000; ++b){
     }
   }
-
   mythread_exit();
 
   printf("This program should never come here\n");

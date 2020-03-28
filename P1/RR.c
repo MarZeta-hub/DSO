@@ -9,7 +9,7 @@
 #include "interrupt.h"
 #include "queue.h"
 
-/*Planificador que tiene como salida el siguiente hilo 
+/*Planificador que tiene como salida el siguiente hilo
   a ejecutar*/
 TCB* scheduler();
 
@@ -241,12 +241,12 @@ TCB* scheduler()
   /* Deshabilito las interrupciones */
   disable_interrupt();
   disable_disk_interrupt();
-  /* Desencolo el hilo siguiente*/
+  /* Desencolo el hilo siguiente */
   TCB* siguiente = dequeue(cola_listos);
   /* Habilito las interrpciones */
   enable_disk_interrupt();
   enable_interrupt();
-  /*Devuelvo el proceso obtenido*/
+  /* Devuelvo el proceso obtenido */
   return siguiente;
 }
 
@@ -256,7 +256,7 @@ void timer_interrupt(int sig)
    /*Reviso si se ha completado su rodaja de tiempo o en el
      caso de que la cola está vacia, pueda proseguir con
      su ejecucion*/
-   if( (running->ticks >0) || (queue_empty(cola_listos)) )
+   if( (running->ticks > 0) || (queue_empty(cola_listos)) )
    {
       running->ticks = running->ticks - 1;
       running->remaining_ticks = running->remaining_ticks - 1;
@@ -264,8 +264,6 @@ void timer_interrupt(int sig)
    }
    /* Le devuelvo su QUANTUM */
    running->ticks = QUANTUM_TICKS;
-   //Para que IDLE no se encole
-   if(current != 0) {
    /* Dishabilito las interrupciones */
    disable_interrupt();
    disable_disk_interrupt();
@@ -274,7 +272,6 @@ void timer_interrupt(int sig)
    /*Habilito las interrupciones */
    enable_disk_interrupt();
    enable_interrupt();
-   }
    /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
    /*Llamamos al activador*/
@@ -292,15 +289,15 @@ void activator(TCB* next)
   current = running->tid;
   if(oldRunning->state == FREE){
     /*Inicio el contexto siguiente sin guardar el anterior*/
-    printf ("*** THREAD <%i> TERMINATED: SETCONTEXT OF <%i>\n", oldRunning->tid, next->tid );
+    printf ("*** THREAD %i TERMINATED: SETCONTEXT OF %i\n", oldRunning->tid, next->tid );
     setcontext (&(next->run_env));
     printf("mythread_free: After setcontext, should never get here!!...\n");
   }else{
-    if (oldRunning->tid != 0){
-       printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", oldRunning->tid, next->tid);
+    if (oldRunning->tid != -1){
+       printf("*** SWAPCONTEXT FROM %i TO %i\n", oldRunning->tid, next->tid);
     }
     else{
-       printf ("*** THREAD READY : SET CONTEXT TO <%i>\n",next->tid);
+       printf ("*** THREAD READY: SET CONTEXT TO %i\n",next->tid);
     }
     /*Guardo el contexto anterior y inicio el siguiente*/
     swapcontext(&(oldRunning->run_env), &(next->run_env));

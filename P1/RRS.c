@@ -161,8 +161,8 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   /*Deshabilito las interrupciones*/
   disable_interrupt();
   disable_disk_interrupt();
-  /*Encolo el hilo en la cola de listos*/
-  printf("Hilo creado nuevo número %i; Remaining_ticks: %i; PRIORIDAD %i\n", i, hilo_a_encolar->remaining_ticks,hilo_a_encolar->priority);
+
+  /* Encolo el hilo en su cola de listos */
   switch (prioridad) {
         case LOW_PRIORITY:
              enqueue(cola_listos_baja,hilo_a_encolar);
@@ -175,10 +175,13 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
              perror("La prioridad no es ni baja ni alta");
              return -1;
   }
+
   /*Habilito las interrupciones*/
   enable_disk_interrupt();
   enable_interrupt();
+
   return i;
+
 }
 /****** Fin de la Creación del Hilo  ******/
 
@@ -268,7 +271,7 @@ TCB* scheduler()
   else{
    siguiente = dequeue(cola_listos_baja);
   }
-  /* Habilito las interrpciones */
+  /* Habilito las interrupciones */
   enable_disk_interrupt();
   enable_interrupt();
   /*Devuelvo el proceso obtenido*/
@@ -279,7 +282,6 @@ TCB* scheduler()
 void timer_interrupt(int sig)
 {
    if(flag){
-
       /* Deshabilito la marca */
       flag = 0;
       /* deshabilito las interrupciones*/
@@ -293,6 +295,7 @@ void timer_interrupt(int sig)
           switch(prioridad_running){
             case LOW_PRIORITY:
                if(current != 0){
+                  running->ticks = QUANTUM_TICKS;
                   enqueue(cola_listos_baja, running);
                }
                break;
@@ -303,8 +306,10 @@ void timer_interrupt(int sig)
                perror("No tiene una prioridad adecuada");
                return;
           }
+          /* Habilito las interrupciones de disco*/
           enable_disk_interrupt();
           enable_interrupt();
+          /*Llamo al activador*/
           activator(siguiente);
       /* Si no, se encola de nuevo el hilo nuevo */
       }else{
@@ -313,8 +318,10 @@ void timer_interrupt(int sig)
        enable_interrupt();
       }
    }
+   /* Para todos los hilos, le resto 1 al tiempo restante*/
    running->remaining_ticks = running->remaining_ticks - 1;
    if( (running->priority == HIGH_PRIORITY) ){
+     /* En caso de ser hilo de alta prioridad, no tiene que hacer nada más*/
      return;
    }
    /*Reviso si se ha completado su rodaja de tiempo o en el
@@ -324,11 +331,8 @@ void timer_interrupt(int sig)
       running->ticks = running->ticks - 1;
       return;
    }
-
    /* Le devuelvo su QUANTUM */
    running->ticks = QUANTUM_TICKS;
-   //Para que IDLE no se encole
-   if(current != 0) {
    /* Dishabilito las interrupciones */
    disable_interrupt();
    disable_disk_interrupt();
@@ -337,7 +341,6 @@ void timer_interrupt(int sig)
    /*Habilito las interrupciones */
    enable_disk_interrupt();
    enable_interrupt();
-   }
    /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
    /*Llamamos al activador*/
@@ -355,17 +358,19 @@ void activator(TCB* next)
   current = running->tid;
   if(oldRunning->state == FREE){
     /*Inicio el contexto siguiente sin guardar el anterior*/
-    printf ("*** THREAD <%i> TERMINATED: SETCONTEXT OF <%i>\n", oldRunning->tid, next->tid );
+    printf ("*** THREAD %i TERMINATED: SETCONTEXT OF %i\n", oldRunning->tid, next->tid );
     setcontext (&(next->run_env));
     printf("mythread_free: After setcontext, should never get here!!...\n");
   }else{
-    /*Guardo el contexto anterior y inicio el siguiente*/
-    if( oldRunning->tid != 0 && oldRunning->priority == LOW_PRIORITY && next->priority == HIGH_PRIORITY){
-         printf("*** THREAD <%i> PREEMTED : SETCONTEXT OF <%i>\n", oldRunning->tid, next->tid);
-    }else if (oldRunning->tid == 0){
-         printf("*** THREAD READY : SET CONTEXT TO <%i>\n",next->tid);
+    /* Guardo el contexto anterior y inicio el siguiente */
+    if( (oldRunning->tid == -1) && (oldRunning->priority == LOW_PRIORITY) && (next->priority == HIGH_PRIORITY) ){
+         printf("*** THREAD %i PREEMTED : SETCONTEXT OF %i\n", oldRunning->tid, next->tid);
+    /* Si el hilo antiguo es el idle */
+    }else if (oldRunning->tid == -1){
+         printf("*** THREAD READY : SET CONTEXT TO %i\n", next->tid);
+    /* Para los demás casos*/
     }else{
-         printf("*** SWAPCONTEXT FROM <%i> TO <%i>\n", oldRunning->tid, next->tid);
+         printf("*** SWAPCONTEXT FROM %i TO %i\n", oldRunning->tid, next->tid);
     }
     swapcontext(&(oldRunning->run_env), &(next->run_env));
   }
