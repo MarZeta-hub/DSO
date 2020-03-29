@@ -44,12 +44,13 @@ static int cola_iniciada = 0;
 /* TCB controlador del hilo ocioso*/
 static TCB idle;
 
-
+/*Función del IDLE*/
 static void idle_function()
 {
   while(1);
 }
 
+/*Función de los hilos*/
 void function_thread(int sec){
 
   while(running->remaining_ticks){

@@ -49,15 +49,14 @@ static int cola_iniciada = 0;
 /* TCB controlador del hilo ocioso*/
 static TCB idle;
 
-int flag = 0;
-
+/* Función que realiza el idle*/
 static void idle_function()
 {
   while(1);
 }
 
+/*Función que realiza un hilo*/
 void function_thread(int sec){
-
   while(running->remaining_ticks){
    /*do something*/
   }
@@ -102,7 +101,7 @@ void init_mythreadlib()
 
   t_state[0].state = INIT;
   t_state[0].priority = LOW_PRIORITY;
-  t_state[0].ticks = 0;
+  t_state[0].ticks = QUANTUM_TICKS;
 
   if(getcontext(&t_state[0].run_env) == -1)
   {
@@ -158,24 +157,37 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
 
   /*Creamos el contexto del hilo*/
   makecontext(&t_state[i].run_env, fun_addr,2,seconds);
+
   TCB *hilo_a_encolar = &t_state[i];
   /*HIGH priority es 1 y LOW_PRIORITY es 0*/
   int prioridad = hilo_a_encolar->priority;
   /*Deshabilito las interrupciones*/
   disable_interrupt();
   disable_disk_interrupt();
-  /*Encolo el hilo en la cola de listos*/
+  /*Encolo el hilo en la cola de listos o si es un hilo de alta prioridad, verifico si tiene que ser
+    puesto en ejecución ahora */
   switch (prioridad) {
         case LOW_PRIORITY:
              enqueue(cola_listos_baja,hilo_a_encolar);
              break;
         case HIGH_PRIORITY:
-             sorted_enqueue(cola_listos_alta, hilo_a_encolar, hilo_a_encolar->remaining_ticks);
-             flag = 1;
-             break;
-        default:
-             perror("La prioridad no es ni baja ni alta");
-             return -1;
+             if((hilo_a_encolar->remaining_ticks < running->remaining_ticks) || (running->priority == LOW_PRIORITY)){
+                     if(running ->priority ==LOW_PRIORITY){
+                        // Le devuelvo el QUANTUM
+                        running->ticks = QUANTUM_TICKS;
+                        enqueue(cola_listos_baja, running);
+                      }else{
+                        sorted_enqueue(cola_listos_alta, running, running->remaining_ticks);
+                        break;
+                       }
+                       /* Habilito las interrupciones*/
+                       enable_disk_interrupt();
+                       enable_interrupt();
+                      /* Llamo al activador*/
+                      activator(hilo_a_encolar);
+              }else{
+                      sorted_enqueue(cola_listos_alta, hilo_a_encolar, hilo_a_encolar->remaining_ticks);
+              }
   }
   /*Habilito las interrupciones*/
   enable_disk_interrupt();
@@ -225,20 +237,33 @@ void disk_interrupt(int sig)
       disable_interrupt();
       disable_disk_interrupt();
    /* Según su prioridad la meto en una cola de listos u otra*/
-   if(hilo_desblock->state != IDLE){
-      switch(prioridad){
+     switch(prioridad){
             case LOW_PRIORITY:
                   enqueue(cola_listos_baja, hilo_desblock);
                   break;
             case HIGH_PRIORITY:
-                  sorted_enqueue(cola_listos_alta, hilo_desblock, hilo_desblock->remaining_ticks);
-                  flag = 1;
+               if((hilo_desblock->remaining_ticks < running->remaining_ticks) || running->priority == LOW_PRIORITY){
+                     if(running ->priority ==LOW_PRIORITY){
+                        // Le devuelvo el QUANTUM
+                        running->ticks = QUANTUM_TICKS;
+                        enqueue(cola_listos_baja, running);
+                      }else{
+                        sorted_enqueue(cola_listos_alta, running, running->remaining_ticks);
+                        break;
+                       }
+                       /* Habilito las interrupciones*/
+                       enable_disk_interrupt();
+                       enable_interrupt();
+                      /* Llamo al activador*/
+                      activator(hilo_desblock);
+              }else{
+                      sorted_enqueue(cola_listos_alta, hilo_desblock, hilo_desblock->remaining_ticks);
+              }
                   break;
             default:
                   perror("La prioridad del hilo no es correcta");
                   return;
-      }
-   }
+     }
      /* Habilito las interrupciones*/
      enable_disk_interrupt();
      enable_interrupt();
@@ -333,53 +358,11 @@ TCB* scheduler()
 /* Timer interrupt */
 void timer_interrupt(int sig)
 {
-   if(flag){
-      /* Deshabilito la marca */
-      flag = 0;
-      /* deshabilito las interrupciones*/
-      disable_interrupt();
-      disable_disk_interrupt();
-      /* Obtengo el nuevo hilo de cola alta que se ha introducido*/
-      TCB *siguiente = dequeue(cola_listos_alta);
-      int prioridad_running = running->priority;
-      /* Si el hilo nuevo tiene menos tiempo que el actual o es de prioridad menor, se cambia */
-      if( (siguiente->remaining_ticks < running->remaining_ticks) || running->priority == LOW_PRIORITY){
-          /* Selecciono la prioridad del hilo ejecutándose*/
-          if(hilo_desblock->state != IDLE){
-              switch(prioridad_running){
-                case LOW_PRIORITY:
-                  if(current != 0){
-                      // Le devuelvo el QUANTUM
-                      running->ticks = QUANTUM_TICKS;
-                      enqueue(cola_listos_baja, running);
-                  }
-                  break;
-                case HIGH_PRIORITY:
-                  sorted_enqueue(cola_listos_alta, running, running->remaining_ticks);
-                  break;
-                default:
-                  perror("No tiene una prioridad adecuada");
-                  return;
-              }
-            } 
-          /* Habilito las interrupciones*/
-          enable_disk_interrupt();
-          enable_interrupt();
-          /* Llamo al activador*/
-          activator(siguiente);
-      /* Si no, se encola de nuevo el hilo nuevo */
-      }else if(hilo_desblock->state != IDLE){
-       sorted_enqueue(cola_listos_alta, siguiente, siguiente->remaining_ticks);
-       /* Habilito las interrupciones*/
-       enable_disk_interrupt();
-       enable_interrupt();
-      }
-   }
    /* Para todos los hilos*/
    running->remaining_ticks = running->remaining_ticks - 1;
    /* Solo para hilos de alta prioridad*/
    if( (running->priority == HIGH_PRIORITY) ){
-     return;
+       return;
    }
    /*Reviso si se ha completado su rodaja de tiempo o en el
      caso de que la cola está vacia, pueda proseguir con
@@ -391,15 +374,15 @@ void timer_interrupt(int sig)
    /* Le devuelvo su QUANTUM */
    running->ticks = QUANTUM_TICKS;
    /* Dishabilito las interrupciones */
-   if(hilo_desblock->state != IDLE){
-      disable_interrupt();
-      disable_disk_interrupt();
+   disable_interrupt();
+   disable_disk_interrupt();
+   if(current != -1){
       /* Encolo el proceso de nuevo a la cola de listos */
       enqueue(cola_listos_baja,running);
-      /*Habilito las interrupciones */
-      enable_disk_interrupt();
-      enable_interrupt();
    }
+   //Habilito las interrupciones
+   enable_disk_interrupt();
+   enable_interrupt();
    /*Llamo al planificador para conocer el siguiente hilo*/
    TCB* next = scheduler();
    /*Llamamos al activador*/
@@ -422,7 +405,7 @@ void activator(TCB* next)
     printf("mythread_free: After setcontext, should never get here!!...\n");
   }else{
     /*Si ha venido un hilo de alta prioridad cuando se estaba ejecutando uno de baja*/
-    if( oldRunning->tid != 0 && oldRunning->priority == LOW_PRIORITY && next->priority == HIGH_PRIORITY){
+    if( oldRunning->tid != -1 && oldRunning->priority == LOW_PRIORITY && next->priority == HIGH_PRIORITY){
          printf("*** THREAD %i PREEMTED : SETCONTEXT OF %i\n", oldRunning->tid, next->tid);
     /* En el caso de que el tid antiguo sea idle*/
     }else if (oldRunning->tid == -1){

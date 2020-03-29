@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <ucontext.h>
 #include <unistd.h>
+
 #include "mythread.h"
 
 
@@ -11,26 +12,25 @@
 extern void function_thread(int sec);
 
 
+
 int main(int argc, char *argv[])
 {
   int j,k,l,m,a,b,f;
 
-  //high
+
   mythread_setpriority(LOW_PRIORITY);
-  if((f = mythread_create(function_thread,HIGH_PRIORITY,3)) == -1){
+  if((f = mythread_create(function_thread,HIGH_PRIORITY,2)) == -1){
       printf("thread failed to initialize\n");
       exit(-1);
   }
 
   read_disk();
   read_disk();
-
-  if((j = mythread_create(function_thread,HIGH_PRIORITY, 7)) == -1){
+  if((j = mythread_create(function_thread,HIGH_PRIORITY, 2)) == -1){
     printf("thread failed to initialize\n");
     exit(-1);
   }
-  //HIGH_PRIORITY
-  if((k = mythread_create(function_thread,LOW_PRIORITY, 3)) == -1){
+  if((k = mythread_create(function_thread,HIGH_PRIORITY, 2)) == -1){
     printf("thread failed to initialize\n");
     exit(-1);
   }
@@ -39,22 +39,20 @@ int main(int argc, char *argv[])
     exit(-1);
   }
 
-  read_disk();
-
-  if((m = mythread_create(function_thread,HIGH_PRIORITY, 2)) == -1){
+  if((m = mythread_create(function_thread,HIGH_PRIORITY, 1)) == -1){
     printf("thread failed to initialize\n");
     exit(-1);
   }
+  read_disk();
 
 
   for (a=0; a<10; ++a) {
-    for (b=0; b<30000000; ++b){
-    }
+    for (b=0; b<30000000; ++b);
   }
-  mythread_exit();
-
+  mythread_exit();	
+  
   printf("This program should never come here\n");
-
+  
   return 0;
 } /****** End main() ******/
 
