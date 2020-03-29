@@ -185,6 +185,9 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
               }else{
                       sorted_enqueue(cola_listos_alta, hilo_a_encolar, hilo_a_encolar->remaining_ticks);
               }
+		default:
+            perror("La prioridad del hilo no es correcta");
+            return;
   }
   
   /*Habilito las interrupciones*/
