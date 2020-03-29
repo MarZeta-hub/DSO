@@ -64,7 +64,6 @@ void function_thread(int sec){
   mythread_exit();
 }
 
-
 /* Initialize the thread library */
 void init_mythreadlib()
 {
@@ -169,7 +168,7 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   switch (prioridad) {
         case LOW_PRIORITY:
              enqueue(cola_listos_baja,hilo_a_encolar);
-             break;
+            break;
         case HIGH_PRIORITY:
              if((hilo_a_encolar->remaining_ticks < running->remaining_ticks) || (running->priority == LOW_PRIORITY)){
                      if(running ->priority ==LOW_PRIORITY){
@@ -178,7 +177,7 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
                         enqueue(cola_listos_baja, running);
                       }else{
                         sorted_enqueue(cola_listos_alta, running, running->remaining_ticks);
-                        break;
+
                        }
                        /* Habilito las interrupciones*/
                        enable_disk_interrupt();
@@ -188,10 +187,11 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
               }else{
                       sorted_enqueue(cola_listos_alta, hilo_a_encolar, hilo_a_encolar->remaining_ticks);
               }
-        default:
-            perror("La prioridad del hilo no es correcta");
-            return;
-        
+                break;
+         default:
+            perror("La prioridad del hilo no es valida");
+            return -1;
+
   }
   /*Habilito las interrupciones*/
   enable_disk_interrupt();
@@ -246,14 +246,13 @@ void disk_interrupt(int sig)
                   enqueue(cola_listos_baja, hilo_desblock);
                   break;
             case HIGH_PRIORITY:
-               if((hilo_desblock->remaining_ticks < running->remaining_ticks) || running->priority == LOW_PRIORITY){
+               if(((hilo_desblock->remaining_ticks < running->remaining_ticks) || running->priority == LOW_PRIORITY)||(current==-1)){
                      if(running ->priority ==LOW_PRIORITY){
                         // Le devuelvo el QUANTUM
                         running->ticks = QUANTUM_TICKS;
                         enqueue(cola_listos_baja, running);
-                      }else{
+                      }else if (current!=-1){
                         sorted_enqueue(cola_listos_alta, running, running->remaining_ticks);
-                        break;
                        }
                        /* Habilito las interrupciones*/
                        enable_disk_interrupt();

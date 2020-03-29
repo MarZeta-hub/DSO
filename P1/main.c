@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
     for (b=0; b<30000000; ++b);
   }
   mythread_exit();	
-  
+
   printf("This program should never come here\n");
   
   return 0;

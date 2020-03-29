@@ -165,37 +165,34 @@ int mythread_create (void (*fun_addr)(),int priority,int seconds)
   /* Encolo el hilo en su cola de listos */
   switch (prioridad) {
         case LOW_PRIORITY:
-             enqueue(cola_listos_baja,hilo_a_encolar);
-             break;
+            enqueue(cola_listos_baja,hilo_a_encolar);
+            break;
         case HIGH_PRIORITY:
-             if((hilo_a_encolar->remaining_ticks < running->remaining_ticks) || (running->priority == LOW_PRIORITY)){
-                     if(running ->priority ==LOW_PRIORITY){
-                        // Le devuelvo el QUANTUM
-                        running->ticks = QUANTUM_TICKS;
-                        enqueue(cola_listos_baja, running);
-                      }else{
+            if((hilo_a_encolar->remaining_ticks < running->remaining_ticks) || (running->priority == LOW_PRIORITY)){
+                if(running ->priority ==LOW_PRIORITY){
+                    // Le devuelvo el QUANTUM
+                    running->ticks = QUANTUM_TICKS;
+                    enqueue(cola_listos_baja, running);
+                    }else{
                         sorted_enqueue(cola_listos_alta, running, running->remaining_ticks);
-                        break;
-                       }
-                       /* Habilito las interrupciones*/
-                       enable_disk_interrupt();
-                       enable_interrupt();
-                      /* Llamo al activador*/
-                      activator(hilo_a_encolar);
-              }else{
-                      sorted_enqueue(cola_listos_alta, hilo_a_encolar, hilo_a_encolar->remaining_ticks);
-              }
+                    }
+                    /* Habilito las interrupciones*/
+                    enable_disk_interrupt();
+                    enable_interrupt();
+                    /* Llamo al activador*/
+                    activator(hilo_a_encolar);
+                }else{
+                    sorted_enqueue(cola_listos_alta, hilo_a_encolar, hilo_a_encolar->remaining_ticks);
+            }
+			break;
 		default:
             perror("La prioridad del hilo no es correcta");
-            return;
+            return -1;
   }
-  
   /*Habilito las interrupciones*/
   enable_disk_interrupt();
   enable_interrupt();
-
   return i;
-
 }
 /****** Fin de la Creación del Hilo  ******/
 
