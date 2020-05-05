@@ -15,23 +15,26 @@
 #include <string.h>
 #include "filesystem/filesystem.h"
 
-
 // Color definitions for asserts
 #define ANSI_COLOR_RESET "\x1b[0m"
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_GREEN "\x1b[32m"
 #define ANSI_COLOR_BLUE "\x1b[34m"
 
-#define N_BLOCKS 25					  // Number of blocks in the device
-#define DEV_SIZE N_BLOCKS *BLOCK_SIZE // Device size, in bytes
+#define N_BLOCKS 290 			  // Number of blocks in the device
+#define DEV_SIZE N_BLOCKS * BLOCK_SIZE // Device size, in bytes
 
 int main()
 {
 	int ret;
-	
+
 	///////
 	ret = mkFS(DEV_SIZE);
-	if (ret != 0)
+	printf ("%i\n", ret);
+	char buffer[2048];
+	bread(DEVICE_IMAGE,0, buffer);
+	/*
+		if (ret != 0)
 	{
 		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST mkFS ", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
 		return -1;
@@ -67,7 +70,7 @@ int main()
 		return -1;
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST unmountFS ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
-
+	*/
 	///////
 
 	return 0;

@@ -1,27 +1,31 @@
 
 /*
- *
- * Operating System Design / Diseño de Sistemas Operativos
+ * Operating System Design / Diseno de Sistemas Operativos
  * (c) ARCOS.INF.UC3M.ES
  *
  * @file 	filesystem.c
  * @brief 	Implementation of the core file system funcionalities and auxiliary functions.
  * @date	Last revision 01/04/2020
- *
  */
-
 
 #include "filesystem/filesystem.h" // Headers for the core functionality
 #include "filesystem/auxiliary.h"  // Headers for auxiliary functions
 #include "filesystem/metadata.h"   // Type and structure declaration of the file system
 
+void createSuperBloque();
 /*
- * @brief 	Generates the proper file system structure in a storage device, as designed by the student.
- * @return 	0 if success, -1 otherwise.
+ * Genera la estructura del sistema de ficheros disenada.
+ * Entrada:Tamano del disco a dar formato, en bytes.
+ * Salida: Devuelve 0 si es correcto y -1 si es un error.
  */
 int mkFS(long deviceSize)
 {
-	return -1;
+ //Superbloque (SB): devuelve el char con 2048B con los datos del superbloque
+
+char contenidoSB[BLOCK_SIZE];
+createSuperBloque(deviceSize, contenidoSB);
+bwrite(DEVICE_IMAGE, 0, contenidoSB);
+return 0;
 }
 
 /*
@@ -160,4 +164,21 @@ int createLn(char *fileName, char *linkName)
 int removeLn(char *linkName)
 {
     return -2;
+}
+
+
+void createSuperBloque(int tamanoDisco, char* contenidoSB){
+	TipoSuperbloque super; 
+	//Obtener el número de bloques 
+	int numBloques = tamanoDisco/BLOCK_SIZE; //para obtener el número de bloques
+	super.numInodos = numBloques; // Contamos con que el número de inodos es igual al número de bloques 1inodo/bloque
+	super.numBloquesMapaInodos = BLOCKS_MAP_INODO; //el mapa de nodos para conocer si está libre o no el nodo
+	super.numBloquesMapaDatos = BLOCKS_MAPS_DATA;  //el mapa de nodos para conocer si está libre o no el bloque de datos
+	super.numBloquesDatos = (numBloques - 3)/2;  // quitar el superbloques y los dos bloques de mapas al total
+	super.numInodos = super.numBloquesDatos; //El número de bloques de inodos
+	super.tamDispositivo = tamanoDisco;	// EL tamano de la partición
+	super.primerInodo = 4;	//El primer bloque de inodos
+	super.primerBloqueDatos = super.numInodos + 4; //El primer bloque de datos
+	sprintf(contenidoSB,"%hu, %hu, %hu, %hu, %i, %hu, %hu", super.numBloquesMapaInodos, super.numBloquesMapaDatos, 
+					super.numBloquesDatos, super.numInodos, super.tamDispositivo, super.primerInodo, super.primerBloqueDatos );
 }
