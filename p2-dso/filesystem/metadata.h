@@ -27,12 +27,12 @@ static inline void bitmap_setbit(char *bitmap_, int i_, int val_) {
    espacio de lo debido.*/
 
 typedef struct {
-unsigned short numBloquesMapaInodos; //Número de bloques del mapa inodos 
-unsigned short numBloquesMapaDatos; //Número de bloques del mapa datos 
-unsigned short numBloquesInodos; //Número de inodos en el dispositivo
 unsigned short primerInodo; //Número bloque del 1o inodo del disp. (inodo raíz) 
-unsigned short numBloquesDatos; // Número de bloques de datos en el dispositivo
+unsigned short numBloquesMapaInodos; //Número de bloques del mapa inodos
+unsigned short numBloquesInodos; //Número de inodos en el dispositivo 
 unsigned short primerBloqueDatos; // Número de bloque del 1o bloque de datos 
+unsigned short numBloquesMapaDatos; //Número de bloques del mapa datos 
+unsigned short numBloquesDatos; // Número de bloques de datos en el dispositivo
 unsigned int tamDispositivo; //Tamano total del disp. (en bytes)
 } TipoSuperbloque;
 
@@ -43,3 +43,9 @@ unsigned short referenciaSig; //dirección del segundo bloque de datos
 unsigned short tamano; //tamano del fichero
 unsigned short punteroRW; //localización del puntero de lectura y escritura
 } TipoInodo;
+
+TipoSuperbloque* sbloque;
+char* i_map;
+char* b_map;
+TipoInodo* inodos;
+char* prueba; //elikminar esto

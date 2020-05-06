@@ -11,6 +11,7 @@
 #include "filesystem/filesystem.h" // Headers for the core functionality
 #include "filesystem/auxiliary.h"  // Headers for auxiliary functions
 #include "filesystem/metadata.h"   // Type and structure declaration of the file system
+#include <string.h>
 
 TipoSuperbloque super; //Defino el tipo para agregar contenido al superbloque
 
@@ -57,7 +58,14 @@ int mkFS(long deviceSize)
  */
 int mountFS(void)
 {
-	return -1;
+	char contenidoSB[BLOCK_SIZE];
+	if( bread(DEVICE_IMAGE, 0, contenidoSB ) == -1) {
+		return -1; //En caso de que de fallo la escritura
+	}
+	tipoSBtoChar(contenidoSB);
+	printfSB();
+	sbloque = &super;
+	return 0;
 }
 
 /*.numBloquesInodoe file system.
@@ -65,6 +73,8 @@ int mountFS(void)
  */
 int createFile(char *fileName)
 {
+
+
 	return -2;
 }
 
@@ -186,6 +196,60 @@ void createSuperBloque(int tamanoDisco, char* contenidoSB){
 	super.numBloquesMapaDatos = BLOCKS_MAPS_DATA;  //el mapa de nodos para conocer si está libre o no el bloque de datos
 	super.numBloquesDatos =  super.numBloquesInodos;// quitar el superbloques y los dos bloques de mapas al total
 	super.tamDispositivo = tamanoDisco;	// EL tamano de la partición
-	sprintf(contenidoSB,"%hu, %hu, %hu, %hu, %hu, %hu, %i", super.primerInodo, super.numBloquesMapaInodos, super.numBloquesInodos, 
-						 super.primerBloqueDatos,super.numBloquesMapaDatos, super.numBloquesDatos, super.tamDispositivo );
+	tipoSBtoChar(contenidoSB); //para convertir de Struct a Char el tipo SuperBLoques
+	printfSB();
+	
+}
+
+void tipoSBtoChar(char* contenidoSB){
+	short auxiliar = 0;
+	//Primer bloque donde se encuentra los bloques de Inodos
+	memcpy(contenidoSB, &super.primerInodo, sizeof super.primerInodo);
+	auxiliar = sizeof super.primerInodo; //Actualizo el valor de auxiliar
+	//El número de bloques del que cuenta el mapa de Inodos
+	memcpy(contenidoSB + auxiliar, &super.numBloquesMapaInodos, sizeof super.numBloquesMapaInodos);
+	auxiliar = sizeof super.numBloquesMapaInodos + auxiliar; //Actualizo el valor de auxiliar
+	//El número total de bloques de inodos
+	memcpy(contenidoSB + auxiliar, &super.numBloquesInodos, sizeof super.numBloquesInodos);
+	auxiliar = sizeof super.numBloquesInodos + auxiliar; //Actualizo el valor de auxiliar
+	//El primer bloque de datos
+	memcpy(contenidoSB + auxiliar, &super.primerBloqueDatos, sizeof super.primerBloqueDatos);
+	auxiliar = sizeof super.primerBloqueDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El nnumero de bloques del mapa de datos
+	memcpy(contenidoSB + auxiliar, &super.numBloquesMapaDatos, sizeof super.numBloquesMapaDatos);
+	auxiliar = sizeof super.numBloquesMapaDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El total de bloques de datos
+	memcpy(contenidoSB + auxiliar, &super.numBloquesDatos, sizeof super.numBloquesDatos);
+	auxiliar = sizeof super.numBloquesDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El tamaño total de la particion
+	memcpy(contenidoSB + auxiliar, &super.tamDispositivo, sizeof super.tamDispositivo);
+}
+
+void TipoChartoSB(char* contenidoSB){
+	short auxiliar = 0;
+	//Primer bloque donde se encuentra los bloques de Inodos
+	memcpy(&super.primerInodo, contenidoSB, sizeof super.primerInodo);
+	auxiliar = sizeof super.primerInodo; //Actualizo el valor de auxiliar
+	//El número de bloques del que cuenta el mapa de Inodos
+	memcpy(&super.numBloquesMapaInodos, contenidoSB + auxiliar, sizeof super.numBloquesMapaInodos);
+	auxiliar = sizeof super.numBloquesMapaInodos + auxiliar; //Actualizo el valor de auxiliar
+	//El número total de bloques de inodos
+	memcpy(&super.numBloquesInodos,contenidoSB + auxiliar, sizeof super.numBloquesInodos);
+	auxiliar = sizeof super.numBloquesInodos + auxiliar; //Actualizo el valor de auxiliar
+	//El primer bloque de datos
+	memcpy(&super.primerBloqueDatos,contenidoSB + auxiliar, sizeof super.primerBloqueDatos);
+	auxiliar = sizeof super.primerBloqueDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El nnumero de bloques del mapa de datos
+	memcpy(&super.numBloquesMapaDatos,contenidoSB + auxiliar, sizeof super.numBloquesMapaDatos);
+	auxiliar = sizeof super.numBloquesMapaDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El total de bloques de datos
+	memcpy(&super.numBloquesDatos, contenidoSB + auxiliar, sizeof super.numBloquesDatos);
+	auxiliar = sizeof super.numBloquesDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El tamaño total de la particion
+	memcpy(&super.tamDispositivo, contenidoSB + auxiliar, sizeof super.tamDispositivo);
+}
+
+void printfSB(){
+	printf("Tipo SB: %hu %hu %hu %hu %hu %hu %i\n", super.primerInodo, super.numBloquesMapaInodos, super.numBloquesInodos, 
+					 super.primerBloqueDatos,super.numBloquesMapaDatos, super.numBloquesDatos, super.tamDispositivo );
 }

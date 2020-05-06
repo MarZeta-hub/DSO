@@ -12,3 +12,9 @@
 
 //función para crear el char para agregar los datos al super bloque
 void createSuperBloque(int tamanoDisco, char* contenidoSB);
+
+void tipoSBtoChar(char* contenidoSB);
+
+void tipoChartoSB(char* contenidoSB);
+
+void printfSB();

@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "metadata.h": "c"
+        "metadata.h": "c",
+        "auxiliary.h": "c",
+        "string.h": "c"
     }
 }
