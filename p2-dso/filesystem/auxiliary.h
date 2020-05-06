@@ -21,7 +21,7 @@ short BLOCKS_MAPS_DATA = 1;
 typedef struct {
 unsigned short numBloquesMapaInodos; //Número de bloques del mapa inodos 
 unsigned short numBloquesMapaDatos; //Número de bloques del mapa datos 
-unsigned short numInodos; //Número de inodos en el dispositivo
+unsigned short numBloquesInodos; //Número de inodos en el dispositivo
 unsigned short primerInodo; //Número bloque del 1o inodo del disp. (inodo raíz) 
 unsigned short numBloquesDatos; // Número de bloques de datos en el dispositivo
 unsigned short primerBloqueDatos; // Número de bloque del 1o bloque de datos 

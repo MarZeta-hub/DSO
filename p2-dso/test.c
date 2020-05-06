@@ -30,10 +30,13 @@ int main()
 
 	///////
 	ret = mkFS(DEV_SIZE);
-	printf ("%i\n", ret);
+
+	/*printf ("%i\n", ret);
 	char buffer[2048];
-	bread(DEVICE_IMAGE,0, buffer);
-	/*
+	bread(DEVICE_IMAGE,2, buffer);
+	printf("%s", buffer);*/
+	
+	
 		if (ret != 0)
 	{
 		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST mkFS ", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
@@ -42,7 +45,7 @@ int main()
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST mkFS ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
 
 	///////
-
+/*
 	ret = mountFS();
 	if (ret != 0)
 	{

@@ -12,6 +12,8 @@
 #include "filesystem/auxiliary.h"  // Headers for auxiliary functions
 #include "filesystem/metadata.h"   // Type and structure declaration of the file system
 
+TipoSuperbloque super; //Defino el tipo para agregar contenido al superbloque
+
 void createSuperBloque();
 /*
  * Genera la estructura del sistema de ficheros disenada.
@@ -20,12 +22,33 @@ void createSuperBloque();
  */
 int mkFS(long deviceSize)
 {
- //Superbloque (SB): devuelve el char con 2048B con los datos del superbloque
+	
+ 	//Superbloque (SB): devuelve el char con 2048B con los datos del superbloque
+	char contenidoSB[BLOCK_SIZE]; //El contenido del superbloque
+	createSuperBloque(deviceSize, contenidoSB); //Añadir todos el contenido al superbloque
+	//Escribo el contenido del superbloque en el primer bloque
+	if( bwrite(DEVICE_IMAGE, 0, contenidoSB) == -1) {
+		return -1; //En caso de que de fallo la escritura
+	}
 
-char contenidoSB[BLOCK_SIZE];
-createSuperBloque(deviceSize, contenidoSB);
-bwrite(DEVICE_IMAGE, 0, contenidoSB);
-return 0;
+	//Mapa de Inodos: pertenece al bloque 1 y mediante él sabemos que bloques de inodos están vacios
+	char contenidoMaps[super.numBloquesInodos] ; //Creamos el bloque de Inodos
+	for( int i; i<super.numBloquesInodos; i++){
+		contenidoMaps[i] = '1';
+	}
+
+	//En nuestro sistema de ficheros vamos a agregar un inodo por bloque, por lo que el número de bloques
+	//Y de inodos es el mismo, por lo que los mapas son iguales.
+	//para el mapa de inodos
+	
+	if( bwrite(DEVICE_IMAGE, 1, contenidoMaps) == -1) {
+		return -1; //En caso de que de fallo la escritura
+	}
+	//Para el mapa de bloques
+	if( bwrite(DEVICE_IMAGE, 2, contenidoMaps) == -1) {
+		return -1; //En caso de que de fallo la escritura
+	}
+	return 0;
 }
 
 /*
@@ -37,17 +60,7 @@ int mountFS(void)
 	return -1;
 }
 
-/*
- * @brief 	Unmounts the file system from the simulated device.
- * @return 	0 if success, -1 otherwise.
- */
-int unmountFS(void)
-{
-	return -1;
-}
-
-/*
- * @brief	Creates a new file, provided it it doesn't exist in the file system.
+/*.numBloquesInodoe file system.
  * @return	0 if success, -1 if the file already exists, -2 in case of error.
  */
 int createFile(char *fileName)
@@ -71,14 +84,10 @@ int removeFile(char *fileName)
 int openFile(char *fileName)
 {
 	return -2;
+
 }
 
-/*
- * @brief	Closes a file.
- * @return	0 if success, -1 otherwise.
- */
-int closeFile(int fileDescriptor)
-{
+int closeFile(int fileDescriptor) {
 	return -1;
 }
 
@@ -156,7 +165,7 @@ int createLn(char *fileName, char *linkName)
 {
     return -1;
 }
-
+TipoSuperbloque super;
 /*
  * @brief 	Deletes an existing symbolic link
  * @return 	0 if the file is correct, -1 if the symbolic link does not exist, -2 in case of error.
@@ -167,18 +176,16 @@ int removeLn(char *linkName)
 }
 
 
-void createSuperBloque(int tamanoDisco, char* contenidoSB){
-	TipoSuperbloque super; 
-	//Obtener el número de bloques 
+void createSuperBloque(int tamanoDisco, char* contenidoSB){ 
+	//Obtener el número de bloques TipoSuperbloque super
 	int numBloques = tamanoDisco/BLOCK_SIZE; //para obtener el número de bloques
-	super.numInodos = numBloques; // Contamos con que el número de inodos es igual al número de bloques 1inodo/bloque
-	super.numBloquesMapaInodos = BLOCKS_MAP_INODO; //el mapa de nodos para conocer si está libre o no el nodo
-	super.numBloquesMapaDatos = BLOCKS_MAPS_DATA;  //el mapa de nodos para conocer si está libre o no el bloque de datos
-	super.numBloquesDatos = (numBloques - 3)/2;  // quitar el superbloques y los dos bloques de mapas al total
-	super.numInodos = super.numBloquesDatos; //El número de bloques de inodos
-	super.tamDispositivo = tamanoDisco;	// EL tamano de la partición
 	super.primerInodo = 4;	//El primer bloque de inodos
-	super.primerBloqueDatos = super.numInodos + 4; //El primer bloque de datos
-	sprintf(contenidoSB,"%hu, %hu, %hu, %hu, %i, %hu, %hu", super.numBloquesMapaInodos, super.numBloquesMapaDatos, 
-					super.numBloquesDatos, super.numInodos, super.tamDispositivo, super.primerInodo, super.primerBloqueDatos );
+	super.numBloquesMapaInodos = BLOCKS_MAP_INODO; //el mapa de nodos para conocer si está libre o no el nodo
+	super.numBloquesInodos =  (numBloques - 3)/2; //El número de bloques de inodos
+	super.primerBloqueDatos = super.numBloquesInodos + 4; //El primer bloque de datos
+	super.numBloquesMapaDatos = BLOCKS_MAPS_DATA;  //el mapa de nodos para conocer si está libre o no el bloque de datos
+	super.numBloquesDatos =  super.numBloquesInodos;// quitar el superbloques y los dos bloques de mapas al total
+	super.tamDispositivo = tamanoDisco;	// EL tamano de la partición
+	sprintf(contenidoSB,"%hu, %hu, %hu, %hu, %hu, %hu, %i", super.primerInodo, super.numBloquesMapaInodos, super.numBloquesInodos, 
+						 super.primerBloqueDatos,super.numBloquesMapaDatos, super.numBloquesDatos, super.tamDispositivo );
 }
