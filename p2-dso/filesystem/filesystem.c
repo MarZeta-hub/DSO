@@ -34,7 +34,7 @@ int mkFS(long deviceSize)
 	//Mapa de Inodos: pertenece al bloque 1 y mediante él sabemos que bloques de inodos están vacios
 	char contenidoMaps[super.numBloquesInodos] ; //Creamos el bloque de Inodos
 	for( int i; i<super.numBloquesInodos; i++){
-		contenidoMaps[i] = '1';
+		contenidoMaps[i] = '0';
 	}
 
 	//En nuestro sistema de ficheros vamos a agregar un inodo por bloque, por lo que el número de bloques
