@@ -28,5 +28,8 @@ void printfSB();
 //Para obtener los datos de un inodo
 void printInodo(int indice);
 
+//El sistema de actualizar el superbloque
+void SbloquetoChar(char* contenido);
+
 //Se utiliza para sincronizar los cambios con el disco
 int syncDisk();
