@@ -31,40 +31,35 @@ int main()
 	///////
 	ret = mkFS(DEV_SIZE);
 
-	/*printf ("%i\n", ret);
-	char buffer[2048];
-	bread(DEVICE_IMAGE,2, buffer);
-	printf("%s", buffer);*/
-	
-	
-	//if (ret != 0)
-/*	{
+	if (ret != 0)
+	{
 		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST mkFS ", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
 		return -1;
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST mkFS ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
-*/
+
 	///////
 
 	ret = mountFS();
 	if (ret != 0)
-	/*{
+	{
 		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST mountFS ", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
 		return -1;
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST mountFS ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
-*/
-	///////
+
+/*	///////
 	ret = createFile("/test.txt");
 	if (ret != 0)
-/*	{
+	{
 		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST createFile ", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
 		return -1;
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST createFile ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
+*/
 
 	///////
-
+	
 	ret = unmountFS();
 	if (ret != 0)
 	{
@@ -72,7 +67,7 @@ int main()
 		return -1;
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST unmountFS ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
-	*/
+	
 	///////
 
 	return 0;

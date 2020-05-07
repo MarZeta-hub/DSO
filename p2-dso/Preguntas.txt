@@ -1,0 +1,5 @@
+¿Qué datos hay que liberar memoría?
+
+¿Cómo se libera memoria de un array?
+
+¿Cómo se libera memoria de un struct?
