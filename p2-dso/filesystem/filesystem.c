@@ -56,7 +56,7 @@ int mkFS(long deviceSize)
 	}
 
 	//EL BLOQUE DE FINAL DE FICHERO
-	char buffer[2048] = "__/EOF/__";  //Contenido del bloque EOF
+	char* buffer = EOF_SYSTEM;  //Contenido del bloque EOF
 	//Lo guardo en el disco. El -1 es debido a que el primerInodo se cuenta dos veces
 	short bloquefinal = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;	
 	if( bwrite(DEVICE_IMAGE, bloquefinal,buffer) == -1){
@@ -224,6 +224,19 @@ int createFile(char *fileName)
 		perror("El nombre de archivo ya existe");
 		return -1;
 	} 
+
+	//Buscar un bloque vacio
+	int dato_libre = -1;
+	for(int i = 0; i< sbloque[0].numBloquesDatos; i++){
+		if(bitmap_getbit(b_map, i) == 0){
+			dato_libre = i;
+			break;
+		}
+	}
+	if(dato_libre == -1){
+		perror("No hay bloque de datos libres");
+		return -2;
+	}
 	//Busco un inodo que este libre
 	int inodo_libre=-1;
 	for(int i=0; i<sbloque[0].numBloquesInodos; i++){
@@ -232,7 +245,6 @@ int createFile(char *fileName)
 			break;
 		}
 	}
-
 	//En el caso de que no exista un inodo libre
 	if(inodo_libre == -1){
 		perror("No hay i-nodos libres");
@@ -240,9 +252,15 @@ int createFile(char *fileName)
 	}
 	//CREAR EL INODO
 	memcpy(inodos[inodo_libre].nomFichero, fileName, strlen(fileName)); //le añado el nuevo nombre
-	bitmap_setbit(i_map,inodo_libre,1); //Y lo ocupo */
+	inodos[inodo_libre].referencia[0] = dato_libre; //le añado el nuevo bloque al inodo
+	//El último bloque será el de EOF
+	inodos[inodo_libre].referencia[1] = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
+	bitmap_setbit(i_map, inodo_libre, 1); //Ocupo en el mapa de bits el nuevo bloque
+	bitmap_setbit(b_map, dato_libre, 1); //Ocupo en el mapa de bits el fichero
 	sbloque[0].numFicheros = sbloque[0].numFicheros + 1; //Añado al superbloque un nuevo archivo
 
+	printfSB();
+	printfInodo();
 	return 0;
 }
 
@@ -255,6 +273,7 @@ int createFile(char *fileName)
  */
 int removeFile(char *fileName)
 {	
+	//LLAMAR AL DESCRIPTOR DE FICHEROS
 	//Comprobar si el tamaño del nombre es correcto
 	if(checkTamanoNombre(fileName) != 0) return -2;
     //Busco donde está el fichero
@@ -283,16 +302,33 @@ int removeFile(char *fileName)
  */
 int openFile(char *fileName)
 {
-	//Buscar entre los inodos el archivo
-	//traer de los bloques todo el contenido mediante un malloc con size de tamaño
-	//devolver el lugar del char generado
-	if (checkTamanoNombre(fileName) != -1) return -2;
+	//Compruebo el tamaño del nombre que me han pasado
+	if (checkTamanoNombre(fileName) != 0){
+		perror("El tamaño del nombre es incorrecto");
+		return -2;
+	} 
 	short indiceFichero = existeFichero(fileName);
 	if (indiceFichero == -1) {
 		perror("El fichero no existe");
 		return -1;
 	}
-	return -2;
+	if( strcmp(fileDescriptor[indiceFichero].nombre, fileName) == 0){
+		perror("el fichero ya está abierto");
+		return -2;
+	}
+
+	memcpy(fileDescriptor[indiceFichero].nombre, fileName, strlen (fileName));
+	fileDescriptor[indiceFichero].punteroRW = 0;
+	fileDescriptor[indiceFichero].punteroArchivo = malloc(BLOCK_SIZE);
+	if (bread(DEVICE_IMAGE, inodos[indiceFichero].referencia [0], fileDescriptor[indiceFichero].punteroArchivo)){
+		perror("Error de la lectura");
+		return -1;
+	}
+	
+	//añadir una funcion para leer el op
+	printf("%s, %s, %i", fileDescriptor[indiceFichero].nombre, fileDescriptor[indiceFichero].punteroArchivo, fileDescriptor[indiceFichero].punteroRW);
+
+	return 0;
 }
 
 
@@ -564,7 +600,6 @@ void inodoVacio(short indice){
 	memset(inodos[indice].nomFichero, '\0', sizeof inodos[indice].nomFichero);
 	inodos[indice].referencia[0] =  sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1;
 	inodos[indice].tamano = 0;
-	inodos[indice].punteroRW = 0;
 	inodos[indice].integridad= 0;
 }
 
@@ -584,8 +619,6 @@ void inodotoChar(char* contenidoInodo, int indice){
 	auxiliar= sizeof inodos[indice].referencia + auxiliar; //Actualizo el valor de auxiliar
 	memcpy( contenidoInodo + auxiliar, &inodos[indice].tamano, sizeof inodos[indice].tamano);
 	auxiliar= sizeof inodos[indice].tamano+ auxiliar; //Actualizo el valor de auxiliar
-	memcpy( contenidoInodo + auxiliar, &inodos[indice].punteroRW, sizeof inodos[indice].punteroRW);
-	auxiliar= sizeof inodos[indice].punteroRW+ auxiliar; //Actualizo el valor de auxiliar
 	memcpy( contenidoInodo + auxiliar, &inodos[indice].integridad, sizeof inodos[indice].integridad);
 }
 
@@ -607,9 +640,6 @@ void chartoInodo(char* contenidoInodo, int indice){
 	//El tamaño del fichero
 	memcpy( &inodos[indice].tamano, contenidoInodo+ auxiliar, sizeof inodos[indice].tamano);
 	auxiliar= sizeof inodos[indice].tamano+ auxiliar; //Actualizo el valor de auxiliar
-	//El puntero de lectura y escritura del fichero
-	memcpy( &inodos[indice].punteroRW, contenidoInodo + auxiliar, sizeof inodos[indice].punteroRW);
-	auxiliar= sizeof inodos[indice].punteroRW+ auxiliar; //Actualizo el valor de auxiliar
 	//El valor de integridad hash
 	memcpy( &inodos[indice].integridad, contenidoInodo + auxiliar, sizeof inodos[indice].integridad);
 }
@@ -636,7 +666,7 @@ void printfSB(){
 */
 void printfInodo(){
 	for(int indice = 0; indice<sbloque[0].numBloquesInodos; indice++){
-		printf("Inodo %i: %s %hu %hu %hu %i\n", indice, inodos[indice].nomFichero, inodos[indice].referencia[0],
-													inodos[indice].tamano, inodos[indice].punteroRW, inodos[indice].integridad);
+		printf("Inodo %i: %s %hu %hu %i\n", indice, inodos[indice].nomFichero, inodos[indice].referencia[0],
+													inodos[indice].tamano, inodos[indice].integridad);
 	}
 }

@@ -12,6 +12,7 @@
 short BLOCKS_MAP_INODO = 1;
 short INODO_SIZE = 12;
 short BLOCKS_MAPS_DATA = 1;
+char* EOF_SYSTEM = "__/EOF/__";
 
 #define bitmap_getbit(bitmap_, i_) (bitmap_[i_ >> 3] & (1 << (i_ & 0x07)))
 static inline void bitmap_setbit(char *bitmap_, int i_, int val_) {
@@ -43,13 +44,13 @@ char nomFichero[32]; //nombre del fichero
 unsigned short referencia[6]; //dirección del primer bloque de datos, solo se pueden tener 
                               //hasta 5 bloques enlazados ya que: 5*2KB = 10KB máximo tamaño de archivo
 unsigned short tamano; //tamano del fichero
-unsigned short punteroRW; //localización del puntero de lectura y escritura
 unsigned int integridad; //CRC de integridad
 } TipoInodo;
 
 typedef struct {
-	short fd;						//descriptor el fichero abierto
-	char nombre [32];           //Nombre del fichero
+	char* punteroArchivo; //descriptor el fichero abierto
+	char nombre [32]; //Nombre del fichero
+  int punteroRW;    //puntero del archivo
 } ficheroAbierto;
 
 
