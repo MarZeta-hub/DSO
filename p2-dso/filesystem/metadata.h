@@ -27,6 +27,7 @@ static inline void bitmap_setbit(char *bitmap_, int i_, int val_) {
    espacio de lo debido.*/
 
 typedef struct {
+int numMagico;
 unsigned short primerInodo; //Número bloque del 1o inodo del disp. (inodo raíz) 
 unsigned short numBloquesMapaInodos; //Número de bloques del mapa inodos
 unsigned short numBloquesInodos; //Número de inodos en el dispositivo 
@@ -46,7 +47,14 @@ unsigned short punteroRW; //localización del puntero de lectura y escritura
 unsigned int integridad; //CRC de integridad
 } TipoInodo;
 
+typedef struct {
+	short fd;						//descriptor el fichero abierto
+	char nombre [32];           //Nombre del fichero
+} ficheroAbierto;
+
+
 TipoSuperbloque* sbloque;
 char* i_map;
 char* b_map;
 TipoInodo* inodos;
+ficheroAbierto fileDescriptor[48];

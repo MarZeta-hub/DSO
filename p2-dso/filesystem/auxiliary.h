@@ -23,7 +23,7 @@ void chartoSB(char* contenidoSB);
 void chartoInodo(char* contenidoInodo, int indice);
 
 //Para pasar crear una estructura inodo formateada
-void inodoVacio();
+void inodoVacio(short indice);
 
 //Para añadir de una estructura inodo a char array
 void inodotoChar(char* contenido, int indice);
@@ -32,10 +32,16 @@ void inodotoChar(char* contenido, int indice);
 void printfSB();
 
 //Para obtener los datos de un inodo
-void printInodo(int indice);
+void printfInodo();
 
-//El sistema de actualizar el superbloque
-void SbloquetoChar(char* contenido);
+//Para buscar si el fichero ya existe 
+int existeFichero(char* fileName);
+
+//Para comprobar el tamaño del nombre de archivo
+int checkTamanoNombre(char* fileName);
+
+//Para buscar un fichero en el fd
+int searchFD(char* fileName);
 
 //Se utiliza para sincronizar los cambios con el disco
 int syncDisk();
