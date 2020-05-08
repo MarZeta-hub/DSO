@@ -14,13 +14,19 @@
 void createSuperBloque(int tamanoDisco, char* contenidoSB);
 
 //Para pasar una estructura TipoSuperBloque a Char
-void tipoSBtoChar(char* contenidoSB);
+void sBtoChar(char* contenidoSB);
 
 //Para pasar una estructura Char a TipoSuperBloque
-void tipoChartoSB(char* contenidoSB);
+void chartoSB(char* contenidoSB);
 
 //Para pasar de una estructura char a TipoInodo
-void tipoChartoInodo(char* contenidoInodo, int indice);
+void chartoInodo(char* contenidoInodo, int indice);
+
+//Para pasar crear una estructura inodo formateada
+void inodoVacio();
+
+//Para añadir de una estructura inodo a char array
+void inodotoChar(char* contenido, int indice);
 
 //Para obtener los datos de Superbloque
 void printfSB();

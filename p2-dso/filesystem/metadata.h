@@ -33,14 +33,14 @@ unsigned short numBloquesInodos; //Número de inodos en el dispositivo
 unsigned short primerBloqueDatos; // Número de bloque del 1o bloque de datos 
 unsigned short numBloquesMapaDatos; //Número de bloques del mapa datos 
 unsigned short numBloquesDatos; // Número de bloques de datos en el dispositivo
-unsigned short numeroFicheros; //Es el número de ficheros del disco
+unsigned short numFicheros; //Es el número de ficheros del disco
 unsigned int tamDispositivo; //Tamano total del disp. (en bytes)
 } TipoSuperbloque;
 
 typedef struct {
 char nomFichero[32]; //nombre del fichero
-unsigned short referencia; //dirección del primer bloque de datos
-unsigned short referenciaSig; //dirección del segundo bloque de datos
+unsigned short referencia[6]; //dirección del primer bloque de datos, solo se pueden tener 
+                              //hasta 5 bloques enlazados ya que: 5*2KB = 10KB máximo tamaño de archivo
 unsigned short tamano; //tamano del fichero
 unsigned short punteroRW; //localización del puntero de lectura y escritura
 unsigned int integridad; //CRC de integridad

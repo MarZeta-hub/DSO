@@ -14,7 +14,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-TipoSuperbloque super; //Defino el tipo para agregar contenido al superbloque
 
 void createSuperBloque();
 /*
@@ -24,34 +23,66 @@ void createSuperBloque();
  */
 int mkFS(long deviceSize)
 {
+
  	//Superbloque (SB): devuelve el char con 2048B con los datos del superbloque
-	char contenidoSB[BLOCK_SIZE]; //El contenido del superbloque
-	createSuperBloque(deviceSize, contenidoSB); //Añadir todos el contenido al superbloque
+	char contenido[BLOCK_SIZE]; //El contenido del superbloque
+	sbloque = malloc(sizeof sbloque[0]); //añado espacio
+	createSuperBloque(deviceSize, contenido); //Añadir todos el contenido al superbloque
 	//Escribo el contenido del superbloque en el primer bloque
-	if( bwrite(DEVICE_IMAGE, 0, contenidoSB) == -1) {
+	if( bwrite(DEVICE_IMAGE, 0, contenido) == -1) {
 		perror("Fallo al escribir el SuperBloque mkFS\n");
 		return -1; //En caso de que de fallo la escritura
 	}
 
-	//Mapa de Inodos: pertenece al bloque 1 y mediante él sabemos que bloques de inodos están vacios
-	char contenidoMaps[super.numBloquesInodos] ; //Creamos el bloque de Inodos
-	for( int i; i<super.numBloquesInodos; i++){
-		bitmap_setbit(contenidoMaps, i, 0);
+	//MAPA DE BITS DE INODOS
+	i_map = malloc(sbloque[0].numBloquesInodos) ; //Creamos el bloque de Inodos
+	for( int i; i<sbloque[0].numBloquesInodos; i++){
+		bitmap_setbit(i_map, i, 0);
 	}
-	//En nuestro sistema de ficheros vamos a agregar un inodo por bloque, por lo que el número de bloques
-	//Y de inodos es el mismo, por lo que los mapas son iguales.
-	//para el mapa de inodos
-	if( bwrite(DEVICE_IMAGE, 1, contenidoMaps) == -1) {
+	//para agregar el MAPA DE INODOS
+	if( bwrite(DEVICE_IMAGE, 1, i_map) == -1) {
 		perror("Fallo al escribir el BitMap de inodos\n");
 		return -1; //En caso de que de fallo la escritura
 	}
-	//Para el mapa de bloques
-	if( bwrite(DEVICE_IMAGE, 2, contenidoMaps) == -1) {
+
+	//Crear el MAPA DE BITS DE DATOS
+	b_map = malloc(sbloque[0].numBloquesDatos);
+	for( int i = 0; i<sbloque[0].numBloquesInodos; i++){
+		bitmap_setbit(b_map, i, 0);
+	}
+	//Agregar el bloque EOF
+	bitmap_setbit(b_map, sbloque[0].numBloquesDatos, 1); //El último bloque de datos es EOF
+	//Para agregar  el MAPA DE BLOQUES
+	if( bwrite(DEVICE_IMAGE, 2, b_map) == -1) {
 		perror("Fallo al escribir el BitMap de Datos\n");
 		return -1; //En caso de que de fallo la escritura
 	}
 
-	//crear ultimo bloque de EOF
+	char buffer[2048] = "__/EOF/__";  //Contenido del bloque EOF
+	//Lo guardo en el disco
+	short bloquefinal = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;	
+	if( bwrite(DEVICE_IMAGE, bloquefinal,buffer) == -1){
+		perror("Error al grabar el bloque EOF");
+		return -1;
+	}
+
+	//INODOS: FORMATEAR TODOS LOS INODOS
+ 	inodos = malloc(sizeof inodos[0]); //añado espacio
+	inodoVacio();
+	//Escribo el contenido del superbloque en el primer bloque
+	for (int i = 0; i < sbloque[0].numBloquesDatos; i++){
+		inodotoChar(contenido, 0); //Añadir todos el contenido al nodo
+		if( bwrite(DEVICE_IMAGE, sbloque[0].primerInodo + i, contenido) == -1) {
+		perror("Fallo al formatear los INODOS mkFS\n");
+		return -1; //En caso de que de fallo la escritura
+		}
+	}
+
+	//Libero memoria principal
+	free(i_map); //Vacío el mapa de inodosç
+	free(b_map); //Vacio el mapa de datos
+	free(inodos); //Vacio los inodos
+	free(sbloque); //Libero la estructura de superbloque
 	return 0;
 }
 
@@ -62,36 +93,44 @@ int mkFS(long deviceSize)
 */
 int mountFS(void)
 {
-	//Montamos en memoria el superbloque
+	//SUPERBLOQUE
 	char contenidoSB[BLOCK_SIZE];
 	if( bread(DEVICE_IMAGE, 0, contenidoSB ) == -1) {return -1;}
 	//Creo espacio para guardar el SUPERBLOQUE
 	sbloque = malloc(sizeof sbloque);
 	//Pasamos los datos a sbloque, es decir, a la memoria
-	tipoChartoSB(contenidoSB);
+	chartoSB(contenidoSB);
 
-	//Montamos en memoria los MAPAS DE BITS
+	//MAPAS DE BITS INODOS
 	char mapAux[BLOCK_SIZE];
-	//Mapa de INODOS
-	//Leo de disco en el bloque 1, el del 
-	if( bread(DEVICE_IMAGE, 1, mapAux) == -1){return -1;}
-	//Igualamos los punteros
-	i_map = malloc(sizeof sbloque[0].numBloquesInodos);
-	memcpy(i_map, mapAux, sizeof sbloque[0].numBloquesInodos);
-	//Mapa de BLOQUES DE DATOS
-	if( bread(DEVICE_IMAGE, 2, mapAux) == -1){return -1;}	
-	//Igualamos los punteros
-	b_map = malloc(sizeof sbloque[0].numBloquesDatos);
-	memcpy(b_map, mapAux, sizeof sbloque[0].numBloquesInodos);
+	//Leo de disco del bloque 1
+	if( bread(DEVICE_IMAGE, 1, mapAux) == -1){
+		perror("Error de lectura de Mapa de bits de INODOS");
+		return -1;
+	}
+	//Añado memoria principal al puntero de mapasInodos
+	i_map = malloc(sbloque[0].numBloquesInodos);
+	//Copio los datos obtenidos
+	memcpy(i_map, mapAux, sbloque[0].numBloquesInodos);
 
-	//Montamos en memoria los Inodos
-	char inodosContent[sbloque[0].numBloquesInodos][BLOCK_SIZE];
-	inodos  = malloc(sizeof inodos * sbloque[0].primerInodo);
-	for(int i=0; i < (sbloque[0].numBloquesInodos); i++) {
-		if( bread(DEVICE_IMAGE, sbloque[0].primerInodo + i, inodosContent[i]) == -1) {return -1;} 
-		tipoChartoInodo(inodosContent[i], i);	
+	//Mapa de BLOQUES DE DATOS
+	//Leo de disco del bloque 2
+	if( bread(DEVICE_IMAGE, 2, mapAux) == -1){
+		perror("Error de lectura de Mapa de bits de Datos");
+		return -1;
 	}	
-	
+	//Añado memoria principal al puntero de mapasDatos
+	b_map = malloc(sbloque[0].numBloquesDatos);
+	//Copio los datos obtenidos
+	memcpy(b_map, mapAux, sbloque[0].numBloquesInodos);
+
+	//INODOS
+	char inodosContent[BLOCK_SIZE];
+	inodos = malloc((sizeof inodos[0]) * sbloque[0].numBloquesInodos);
+	for(int i=0; i < (sbloque[0].numBloquesInodos); i++) {
+		if( bread(DEVICE_IMAGE, sbloque[0].primerInodo + i, inodosContent) == -1) {return -1;} 
+		chartoInodo(inodosContent, i);	
+	}
 	return 0;
 }
 
@@ -103,14 +142,17 @@ int mountFS(void)
 int unmountFS(void)
 {
 	if( syncDisk() == -1){
+		perror("Error al sincronizar con el disco");
 		return -1;
-	}
+	} 
+
 	//Desmontamos los datos del disco en memoria
+  	free(inodos);
 	free (sbloque);
 	free (i_map);
     free (b_map);
-    free (inodos);
 	return 0;
+
 }
 
 int syncDisk(){
@@ -155,13 +197,14 @@ int syncDisk(){
  */
 int createFile(char *fileName)
 {
+	/*
 	//no más de 48 archivos
 	//Buscar un inodo vacío
 	//Modificas el Inodo vacia mediante inodo[Indice]
 	//Buscar bloque libre de datos
 	//Actulizar los mapas de bits con set 1
 
-	if(sbloque[0].numeroFicheros==48){
+	if(sbloque[0].numFicheros==48){
 		printf("Máximo de ficheros alcanzado");
 		return -1;
 	}
@@ -170,11 +213,11 @@ int createFile(char *fileName)
 	int bloque_libre=-1;
 
 	for(int i=0; i<sbloque[0].numBloquesInodos; i++){
-		/**
+		*//**
 		 * Introducir el get y set de bitmap
 		 * 
 		*/
-		if(i_map[i]==0){
+/*		if(i_map[i]==0){
 			i_map[i]==1;
 			inodo_libre=i;
 		}
@@ -189,11 +232,11 @@ int createFile(char *fileName)
 	}
 
 	for(int j=0; j<sbloque[0].numBloquesDatos; j++){
-		/**
+		*//**
 		 * Introducir el get y set de bitmap
 		 * 
 		 */
-		if(b_map[j]==0){
+	/*	if(b_map[j]==0){
 			b_map[j]=1;
 
 			bloque_libre=j;
@@ -204,7 +247,7 @@ int createFile(char *fileName)
 		printf("No hay bloques de datos libres libres");
 		return -1;
 	}
-
+*/
 	return 0;
 }
 
@@ -329,6 +372,7 @@ int removeLn(char *linkName)
     return -2;
 }
 
+
 /**
  * Crea un nuevo superbloque a partir de los parámetros dados y
  * almacena la información en un array de caracteres
@@ -338,113 +382,25 @@ int removeLn(char *linkName)
 void createSuperBloque(int tamanoDisco, char* contenidoSB){ 
 	//Obtener el número de bloques TipoSuperbloque super
 	int numBloques = tamanoDisco/BLOCK_SIZE; //para obtener el número de bloques
-	super.primerInodo = 3;	//El primer bloque de inodos
-	super.numBloquesMapaInodos = BLOCKS_MAP_INODO; //el mapa de nodos para conocer si está libre o no el nodo
-	super.numBloquesInodos =  (numBloques - 3)/2; //El número de bloques de inodos
-	super.primerBloqueDatos = super.numBloquesInodos + super.primerInodo; //El primer bloque de datos
-	super.numBloquesMapaDatos = BLOCKS_MAPS_DATA;  //el mapa de nodos para conocer si está libre o no el bloque de datos
-	super.numBloquesDatos =  super.numBloquesInodos;// quitar el superbloques y los dos bloques de mapas al total
-	super.tamDispositivo = tamanoDisco;	// EL tamano de la partición
-	super.numeroFicheros = 0;
-	tipoSBtoChar(contenidoSB); //para convertir de Struct a Char el tipo SuperBLoques
-	
+	sbloque[0].primerInodo = 3;	//El primer bloque de inodos SuperBloque 0, Mapa 1 y mapa 2
+	sbloque[0].numBloquesMapaInodos = BLOCKS_MAP_INODO; //el mapa de nodos para conocer si está libre o no el nodo
+	sbloque[0].numBloquesInodos =  (numBloques - 3)/2; //El número de bloques de inodos
+	sbloque[0].primerBloqueDatos = sbloque[0].numBloquesInodos + sbloque[0].primerInodo; //El primer bloque de datos
+	sbloque[0].numBloquesMapaDatos = BLOCKS_MAPS_DATA;  //el mapa de nodos para conocer si está libre o no el bloque de datos
+	if((numBloques - 3)%2 == 0) sbloque[0].numBloquesDatos =  sbloque[0].numBloquesInodos;// quitar el superbloques y los dos bloques de mapas al total
+	else sbloque[0].numBloquesDatos =  sbloque[0].numBloquesInodos + 1;// quitar el superbloques y los dos bloques de mapas al total
+	sbloque[0].tamDispositivo = tamanoDisco;	// EL tamano de la partición
+	sbloque[0].numFicheros = 0;
+	sBtoChar(contenidoSB); //para convertir de Struct a Char el tipo SuperBLoques
 }
+
 
 /**
  * Pasa los datos de una estructura superbloque a un array de caracteres
  * Entrada: el array de caracteres
  * Salida: nada
 */
-void tipoSBtoChar(char* contenidoSB){
-	short auxiliar = 0;
-	//Primer bloque donde se encuentra los bloques de Inodos
-	memcpy(contenidoSB, &super.primerInodo, sizeof super.primerInodo);
-	auxiliar = sizeof super.primerInodo; //Actualizo el valor de auxiliar
-	//El número de bloques del que cuenta el mapa de Inodos
-	memcpy(contenidoSB + auxiliar, &super.numBloquesMapaInodos, sizeof super.numBloquesMapaInodos);
-	auxiliar = sizeof super.numBloquesMapaInodos + auxiliar; //Actualizo el valor de auxiliar
-	//El número total de bloques de inodos
-	memcpy(contenidoSB + auxiliar, &super.numBloquesInodos, sizeof super.numBloquesInodos);
-	auxiliar = sizeof super.numBloquesInodos + auxiliar; //Actualizo el valor de auxiliar
-	//El primer bloque de datos
-	memcpy(contenidoSB + auxiliar, &super.primerBloqueDatos, sizeof super.primerBloqueDatos);
-	auxiliar = sizeof super.primerBloqueDatos + auxiliar; //Actualizo el valor de auxiliar
-	//El nnumero de bloques del mapa de datos
-	memcpy(contenidoSB + auxiliar, &super.numBloquesMapaDatos, sizeof super.numBloquesMapaDatos);
-	auxiliar = sizeof super.numBloquesMapaDatos + auxiliar; //Actualizo el valor de auxiliar
-	//El total de bloques de datos
-	memcpy(contenidoSB + auxiliar, &super.numBloquesDatos, sizeof super.numBloquesDatos);
-	auxiliar = sizeof super.numBloquesDatos + auxiliar; //Actualizo el valor de auxiliar
-	//El numero de fichero actualmente
-	memcpy(contenidoSB + auxiliar, &super.numeroFicheros, sizeof super.numeroFicheros);
-	//El tamaño total de la particion
-	memcpy(contenidoSB + auxiliar, &super.tamDispositivo, sizeof super.tamDispositivo);
-}
-
-/**
- * Pasa de un array de caracteres a una estructura de superbloques
- * Entrada: el array de caracteres
- * Salida: nada
-*/
-void tipoChartoSB(char* contenidoSB){
-	short auxiliar = 0;
-	//Primer bloque donde se encuentra los bloques de Inodos
-	memcpy(&sbloque[0].primerInodo, contenidoSB, sizeof sbloque[0].primerInodo);
-	auxiliar = sizeof sbloque[0].primerInodo; //Actualizo el valor de auxiliar
-	//El número de bloque[0]s del que cuenta el mapa de Inodos
-	memcpy(&sbloque[0].numBloquesMapaInodos, contenidoSB + auxiliar, sizeof sbloque[0].numBloquesMapaInodos);
-	auxiliar = sizeof sbloque[0].numBloquesMapaInodos + auxiliar; //Actualizo el valor de auxiliar
-	//El número total de bloques de inodos
-	memcpy(&sbloque[0].numBloquesInodos,contenidoSB + auxiliar, sizeof sbloque[0].numBloquesInodos);
-	auxiliar = sizeof sbloque[0].numBloquesInodos + auxiliar; //Actualizo el valor de auxiliar
-	//El primer bloque de datos
-	memcpy(&sbloque[0].primerBloqueDatos,contenidoSB + auxiliar, sizeof sbloque[0].primerBloqueDatos);
-	auxiliar = sizeof sbloque[0].primerBloqueDatos + auxiliar; //Actualizo el valor de auxiliar
-	//El numero de bloques del mapa de datos
-	memcpy(&sbloque[0].numBloquesMapaDatos,contenidoSB + auxiliar, sizeof sbloque[0].numBloquesMapaDatos);
-	auxiliar = sizeof sbloque[0].numBloquesMapaDatos + auxiliar; //Actualizo el valor de auxiliar
-	//El total de bloques de datos
-	memcpy(&sbloque[0].numBloquesDatos, contenidoSB + auxiliar, sizeof sbloque[0].numBloquesDatos);
-	auxiliar = sizeof sbloque[0].numBloquesDatos + auxiliar; //Actualizo el valor de auxiliar
-	//El número actual de ficheros
-	memcpy(&sbloque[0].numeroFicheros, contenidoSB + auxiliar, sizeof sbloque[0].numeroFicheros);
-	//El tamaño total de la particion
-	memcpy(&sbloque[0].tamDispositivo, contenidoSB + auxiliar, sizeof sbloque[0].tamDispositivo);
-}
-
-/**
- * Pasa de un array de caracteres a una estructura de inodos
- * Entrada: el array de contenidos y el indice
- * Salida: nada
-*/
-void tipoChartoInodo(char* contenidoInodo, int indice){
-	int auxiliar = 0;
-	//El nombre del fichero
-	memcpy( inodos[indice].nomFichero, contenidoInodo, sizeof inodos[indice].nomFichero);
-	auxiliar = sizeof inodos[indice].nomFichero; //Actualizo el valor de auxiliar
-	//La dirección del bloque de datos
-	memcpy( &inodos[indice].referencia, contenidoInodo + auxiliar, sizeof inodos[indice].referencia);
-	auxiliar= sizeof inodos[indice].referencia+ auxiliar; //Actualizo el valor de auxiliar
-	//La dirección del siguiente bloque de datos
-	memcpy( &inodos[indice].referenciaSig, contenidoInodo+ auxiliar, sizeof inodos[indice].referenciaSig);
-	auxiliar= sizeof inodos[indice].referenciaSig+ auxiliar; //Actualizo el valor de auxiliar
-	//El tamaño del fichero
-	memcpy( &inodos[indice].tamano, contenidoInodo+ auxiliar, sizeof inodos[indice].tamano);
-	auxiliar= sizeof inodos[indice].tamano+ auxiliar; //Actualizo el valor de auxiliar
-	//El puntero de lectura y escritura del fichero
-	memcpy( &inodos[indice].punteroRW, contenidoInodo + auxiliar, sizeof inodos[indice].punteroRW);
-	auxiliar= sizeof inodos[indice].punteroRW+ auxiliar; //Actualizo el valor de auxiliar
-	//El valor de integridad hash
-	memcpy( &inodos[indice].integridad, contenidoInodo + auxiliar, sizeof inodos[indice].integridad);
-
-}
-
-/**
- * Pasa los datos de una estructura superbloque a un array de caracteres
- * Entrada: el array de caracteres
- * Salida: nada
-*/
-void SbloquetoChar(char* contenidoSB){
+void sBtoChar(char* contenidoSB){
 	short auxiliar = 0;
 	//Primer bloque donde se encuentra los bloques de Inodos
 	memcpy(contenidoSB, &sbloque[0].primerInodo, sizeof sbloque[0].primerInodo);
@@ -465,11 +421,96 @@ void SbloquetoChar(char* contenidoSB){
 	memcpy(contenidoSB + auxiliar, &sbloque[0].numBloquesDatos, sizeof sbloque[0].numBloquesDatos);
 	auxiliar = sizeof sbloque[0].numBloquesDatos + auxiliar; //Actualizo el valor de auxiliar
 	//El numero de fichero actualmente
-	memcpy(contenidoSB + auxiliar, &sbloque[0].numeroFicheros, sizeof sbloque[0].numeroFicheros);
+	memcpy(contenidoSB + auxiliar, &sbloque[0].numFicheros, sizeof sbloque[0].numFicheros);
+	auxiliar = sizeof sbloque[0].numFicheros + auxiliar; //Actualizo el valor de auxiliar
 	//El tamaño total de la particion
 	memcpy(contenidoSB + auxiliar, &sbloque[0].tamDispositivo, sizeof sbloque[0].tamDispositivo);
 }
 
+
+/**
+ * Pasa de un array de caracteres a una estructura de superbloques
+ * Entrada: el array de caracteres
+ * Salida: nada
+*/
+void chartoSB(char* contenidoSB){
+	short auxiliar = 0;
+	//Primer bloque donde se encuentra los bloques de Inodos
+	memcpy(&sbloque[0].primerInodo, contenidoSB, sizeof sbloque[0].primerInodo);
+	auxiliar = sizeof sbloque[0].primerInodo; //Actualizo el valor de auxiliar
+	//El número de bloque[0]s del que cuenta el mapa de Inodos
+	memcpy(&sbloque[0].numBloquesMapaInodos, contenidoSB + auxiliar, sizeof sbloque[0].numBloquesMapaInodos);
+	auxiliar = sizeof sbloque[0].numBloquesMapaInodos + auxiliar; //Actualizo el valor de auxiliar
+	//El número total de bloques de inodos
+	memcpy(&sbloque[0].numBloquesInodos,contenidoSB + auxiliar, sizeof sbloque[0].numBloquesInodos);
+	auxiliar = sizeof sbloque[0].numBloquesInodos + auxiliar; //Actualizo el valor de auxiliar
+	//El primer bloque de datos
+	memcpy(&sbloque[0].primerBloqueDatos,contenidoSB + auxiliar, sizeof sbloque[0].primerBloqueDatos);
+	auxiliar = sizeof sbloque[0].primerBloqueDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El numero de bloques del mapa de datos
+	memcpy(&sbloque[0].numBloquesMapaDatos,contenidoSB + auxiliar, sizeof sbloque[0].numBloquesMapaDatos);
+	auxiliar = sizeof sbloque[0].numBloquesMapaDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El total de bloques de datos
+	memcpy(&sbloque[0].numBloquesDatos, contenidoSB + auxiliar, sizeof sbloque[0].numBloquesDatos);
+	auxiliar = sizeof sbloque[0].numBloquesDatos + auxiliar; //Actualizo el valor de auxiliar
+	//El número actual de ficheros
+	memcpy(&sbloque[0].numFicheros, contenidoSB + auxiliar, sizeof sbloque[0].numFicheros);
+	auxiliar = sizeof sbloque[0].numFicheros + auxiliar; //Actualizo el valor de auxiliar
+	//El tamaño total de la particion
+	memcpy(&sbloque[0].tamDispositivo, contenidoSB + auxiliar, sizeof sbloque[0].tamDispositivo);
+}
+
+void inodoVacio(){
+	memset(inodos[0].nomFichero, '\0', sizeof inodos[0].nomFichero);
+	inodos[0].referencia[0] =  sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1;
+	inodos[0].tamano = 0;
+	inodos[0].punteroRW = 0;
+	inodos[0].integridad= 0;
+}
+
+/**
+ * Para pasar de Inodos a Char
+ * Entrada: array de caracteres y el indice
+ * Salida: nada
+*/
+void inodotoChar(char* contenidoInodo, int indice){
+	short auxiliar = 0;
+	//Primer bloque donde se encuentra los bloques de Inodos
+	memcpy( contenidoInodo, inodos[indice].nomFichero, sizeof inodos[indice].nomFichero);
+	auxiliar = sizeof inodos[indice].nomFichero; //Actualizo el valor de auxiliar
+	memcpy( contenidoInodo + auxiliar, inodos[indice].referencia, sizeof inodos[indice].referencia);
+	auxiliar= sizeof inodos[indice].referencia + auxiliar; //Actualizo el valor de auxiliar
+	memcpy( contenidoInodo + auxiliar, &inodos[indice].tamano, sizeof inodos[indice].tamano);
+	auxiliar= sizeof inodos[indice].tamano+ auxiliar; //Actualizo el valor de auxiliar
+	memcpy( contenidoInodo + auxiliar, &inodos[indice].punteroRW, sizeof inodos[indice].punteroRW);
+	auxiliar= sizeof inodos[indice].punteroRW+ auxiliar; //Actualizo el valor de auxiliar
+	memcpy( contenidoInodo + auxiliar, &inodos[indice].integridad, sizeof inodos[indice].integridad);
+}
+
+
+/**
+ * Pasa de un array de caracteres a una estructura de inodos
+ * Entrada: el array de contenidos y el indice
+ * Salida: nada
+*/
+void chartoInodo(char* contenidoInodo, int indice){
+	int auxiliar = 0;
+	//El nombre del fichero
+	memcpy( inodos[indice].nomFichero, contenidoInodo, sizeof inodos[indice].nomFichero);
+	auxiliar = sizeof inodos[indice].nomFichero; //Actualizo el valor de auxiliar
+	//La dirección del bloque de datos
+	memcpy( inodos[indice].referencia, contenidoInodo + auxiliar, sizeof inodos[indice].referencia);
+	auxiliar= sizeof inodos[indice].referencia+ auxiliar; //Actualizo el valor de auxiliar
+	//El tamaño del fichero
+	memcpy( &inodos[indice].tamano, contenidoInodo+ auxiliar, sizeof inodos[indice].tamano);
+	auxiliar= sizeof inodos[indice].tamano+ auxiliar; //Actualizo el valor de auxiliar
+	//El puntero de lectura y escritura del fichero
+	memcpy( &inodos[indice].punteroRW, contenidoInodo + auxiliar, sizeof inodos[indice].punteroRW);
+	auxiliar= sizeof inodos[indice].punteroRW+ auxiliar; //Actualizo el valor de auxiliar
+	//El valor de integridad hash
+	memcpy( &inodos[indice].integridad, contenidoInodo + auxiliar, sizeof inodos[indice].integridad);
+
+}
 
 /**
  * Imprime en pantalla los atributos de una estructura de superbloques
@@ -478,7 +519,7 @@ void SbloquetoChar(char* contenidoSB){
 */
 void printfSB(){
 	printf("Tipo SB: %hu %hu %hu %hu %hu %hu %hu %i\n", sbloque[0].primerInodo, sbloque[0].numBloquesMapaInodos, sbloque[0].numBloquesInodos, 
-					 sbloque[0].primerBloqueDatos,sbloque[0].numBloquesMapaDatos, sbloque[0].numBloquesDatos, sbloque[0].numeroFicheros, 
+					 sbloque[0].primerBloqueDatos,sbloque[0].numBloquesMapaDatos, sbloque[0].numBloquesDatos, sbloque[0].numFicheros, 
 					 sbloque[0].tamDispositivo );
 }
 
@@ -487,7 +528,7 @@ void printfSB(){
  * Entrada: el bloque de se desea imprimir
  * Salida: nada
 */
-void printfInodo(int indice){
-	printf("Inodo %i: %s %hu %hu %hu %hu %hu\n", indice, inodos[indice].nomFichero, inodos[indice].referencia, inodos[indice].referenciaSig,
+void printInodo(int indice){
+	printf("Inodo %i: %s %hu %hu %hu %i\n", indice, inodos[indice].nomFichero, inodos[indice].referencia[0],
 													inodos[indice].tamano, inodos[indice].punteroRW, inodos[indice].integridad);
 }
