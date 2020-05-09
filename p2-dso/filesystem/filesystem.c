@@ -422,7 +422,7 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
 
 
 
-//*
+/*
  * @brief	Modifies the position of the seek pointer of a file.
  * @return	0 if succes, -1 otherwise.
  */
