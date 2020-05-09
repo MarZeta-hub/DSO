@@ -438,7 +438,7 @@ int lseekFile(int file_Descriptor, long offset, int whence)
 	case 0: //FS_SEEK_CUR  DESDE LA POSICION ACTUAL
 		short nuevaPosicion = fileDescriptor[file_Descriptor].punteroRW + offset;
 
-		if(nuevaPosicion<0 || nuevaPosicion>tamanoFichero){//Comprobamos que la nueva posicion del puntero no exceda los limites del fichero
+		if(nuevaPosicion<0 || nuevaPosicion>fileDescriptor[file_Descriptor].punteroInodo[0].tamano){//Comprobamos que la nueva posicion del puntero no exceda los limites del fichero
 			perror("El offset introucido excede los limites del fichero");
 			return -1;
 		}
@@ -450,7 +450,7 @@ int lseekFile(int file_Descriptor, long offset, int whence)
 		break;
 	case 2: //FS_SEEK_END DESDE EL FINAL
 		
-		fileDescriptor[file_Descriptor].punteroRW=tamanoFichero;//actualizamos al final del archivo el puntero
+		fileDescriptor[file_Descriptor].punteroRW=fileDescriptor[file_Descriptor].punteroInodo[0].tamano;//actualizamos al final del archivo el puntero
 		break;	
 	default:
 		perror("Opcion whence no valida");//Si whence no es valido
@@ -492,12 +492,12 @@ int checkFile (char * fileName)
 	}
 
 
-	char buffer[tamanoFichero];
+	char buffer[fileDescriptor[fd].punteroInodo[0].tamano];
 	readFile(fd, buffer, tamanoFichero);//Leemos el fichero
 	
 	uint32_t CRC = CRC32(buffer, strlen(buffer));//hacemos el CRC de los datos leidos  CAMBIAR EL TIPO DEL CRC EN EL INODO
 
-	if(CRC!=fileDescriptor[fd].punteroInodo[3]){ //comparamos los CRC
+	if(CRC!=fileDescriptor[fd].punteroInodo[0].integridad){ //comparamos los CRC
 		perror("El archivo esta corrupto");
 		return -1;	
 	}
@@ -537,12 +537,12 @@ int includeIntegrity (char * fileName)
 		return -2;
 	}
 
-	char buffer[tamanoFichero];
-	readFile(fd, buffer, tamanoFichero);//Leemos el fichero
+	char buffer[fileDescriptor[fd].punteroInodo[0].tamano];
+	readFile(fd, buffer, fileDescriptor[fd].punteroInodo[0].tamano);//Leemos el fichero
 	
 	uint32_t CRC = CRC32(buffer, strlen(buffer));//hacemos el CRC de los datos leidos
 
-	fileDescriptor[fd].punteroInodo[3]=CRC;//Establecemos el CRC creado
+	fileDescriptor[fd].punteroInodo[0].integridad=CRC;//Establecemos el CRC creado
 
 	closeFile(fd);
 	return 0;
@@ -594,12 +594,12 @@ int closeFileIntegrity(int fileDescriptor)
 		return -1;
 	}
 
-	char buffer[tamanoFichero];
+	char buffer[fileDescriptor[fd].punteroInodo[0].tamano];
 	readFile(fd, buffer, tamanoFichero);//Leemos el fichero
 	
 	uint32_t CRC = CRC32(buffer, strlen(buffer));//hacemos el CRC de los datos leidos
 
-	fileDescriptor[fd].punteroInodo[3]=CRC;//Establecemos el CRC creado
+	fileDescriptor[fd].punteroInodo[0].integridad=CRC;//Establecemos el CRC creado
 
 	closeFile(fd);
     return -1;
