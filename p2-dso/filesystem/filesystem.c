@@ -417,7 +417,52 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
  */
 int writeFile(int file_Descriptor, void *buffer, int numBytes)
 {
-	return 0;
+		if(numBytes>LIMITE_TAMANO){
+		perror("Error, el tamaño dado es mayor que el tamaño máximo de archivo");
+		return -1;
+	}
+	//Creo un nuevo lector para grabar lo que obtengo de disco
+	buffer = malloc (LIMITE_TAMANO); //************REVISAR EL USO DE BUFFER EN READ***************
+	//Variables:
+	int punteroW = fileDescriptor[file_Descriptor].punteroRW;
+	int numBytesEscritos = 0; //Los bytes que obtengo al escribir en disco
+	int indiceBloque = 0; //El indice del bloque que escribo en el archivo desde el inodo
+	int bloqueEscrito = -1; //El bloque que escribo de disco
+	//Último bloque del disco, significa que es el fin del fichero
+	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
+	//Mientras no supere los bytes escritos de disco de los bytes del usuario
+	while(numBytesEscritos < numBytes){
+		// Consigo el bloque de disco que quiero escribir
+		bloqueEscrito = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[indiceBloque];
+		//Compruebo que no es el fin del fichero
+		if( bloqueEscrito == bloqueEOF )break;
+		//Escribo en de disco para conseguir el bloque y lo añado a nuestro char
+		if( bwrite(DEVICE_IMAGE, bloqueEscrito, buffer + numBytesEscritos) == -1){
+			perror("Error al escribir en disco");
+			return -1;
+		}
+		//Actualizo el número de bytes que he escrito en disco
+		numBytesEscritos = numBytesEscritos + strlen(buffer);
+		//Actualizo el indice de bloques para obtener el siguiente bloque
+		indiceBloque = indiceBloque + 1;
+	}
+
+	if(numBytesEscritos < numBytes) {
+		//En el caso de que el numero de bytes escritos sea menor que el que me piden
+		memcpy(buffer, buffer + punteroW, numBytesEscritos);
+	}else{
+		//En el caso de que escribamos más de disco de lo que pide el usuario
+		memcpy(buffer, buffer + punteroW, numBytes);
+		//Y actualizo la variable de bytes copiados
+		numBytesEscritos = numBytes;
+	}
+	//Actualizo el puntero
+	fileDescriptor[file_Descriptor].punteroRW = punteroW;
+	//Libero memoria del char utilizado para copiar los bloques
+	free(buffer);
+	buffer = NULL;
+	//Devuelvo los bloques escritos
+	return numBytesEscritos;
 }
 
 
