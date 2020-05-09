@@ -34,6 +34,12 @@ void printfSB();
 //Para obtener los datos de un inodo
 void printfInodo();
 
+//Para leer el contenido del fd
+void printfFD();
+
+//Para leer un mapa de bits
+void printMap(int mapa);
+
 //Para buscar si el fichero ya existe 
 int existeFichero(char* fileName);
 

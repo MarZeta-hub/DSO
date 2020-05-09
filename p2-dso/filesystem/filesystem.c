@@ -77,10 +77,14 @@ int mkFS(long deviceSize)
 	}
 
 	//Libero memoria principal
-	free(i_map); //Vacío el mapa de inodosç
+	free(i_map); //Vacío el mapa de inodos
+	i_map = NULL;
 	free(b_map); //Vacio el mapa de datos
+	b_map = NULL;
 	free(inodos); //Vacio los inodos
+	inodos = NULL;
 	free(sbloque); //Libero la estructura de superbloque
+	sbloque = NULL;
 	return 0;
 }
 
@@ -225,18 +229,6 @@ int createFile(char *fileName)
 		return -1;
 	} 
 
-	//Buscar un bloque vacio
-	int dato_libre = -1;
-	for(int i = 0; i< sbloque[0].numBloquesDatos; i++){
-		if(bitmap_getbit(b_map, i) == 0){
-			dato_libre = i;
-			break;
-		}
-	}
-	if(dato_libre == -1){
-		perror("No hay bloque de datos libres");
-		return -2;
-	}
 	//Busco un inodo que este libre
 	int inodo_libre=-1;
 	for(int i=0; i<sbloque[0].numBloquesInodos; i++){
@@ -252,15 +244,9 @@ int createFile(char *fileName)
 	}
 	//CREAR EL INODO
 	memcpy(inodos[inodo_libre].nomFichero, fileName, strlen(fileName)); //le añado el nuevo nombre
-	inodos[inodo_libre].referencia[0] = dato_libre; //le añado el nuevo bloque al inodo
-	//El último bloque será el de EOF
-	inodos[inodo_libre].referencia[1] = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
 	bitmap_setbit(i_map, inodo_libre, 1); //Ocupo en el mapa de bits el nuevo bloque
-	bitmap_setbit(b_map, dato_libre, 1); //Ocupo en el mapa de bits el fichero
 	sbloque[0].numFicheros = sbloque[0].numFicheros + 1; //Añado al superbloque un nuevo archivo
 
-	printfSB();
-	printfInodo();
 	return 0;
 }
 
@@ -273,7 +259,6 @@ int createFile(char *fileName)
  */
 int removeFile(char *fileName)
 {	
-	//LLAMAR AL DESCRIPTOR DE FICHEROS
 	//Comprobar si el tamaño del nombre es correcto
 	if(checkTamanoNombre(fileName) != 0) return -2;
     //Busco donde está el fichero
@@ -283,6 +268,10 @@ int removeFile(char *fileName)
 		perror("El fichero no existe");
 		return -1;
 	}
+
+	//Elimino el fd si tiene uno
+	closeFile(searchFD(fileName));
+
 	//Formateo el nodo
 	inodoVacio(indiceFichero);
 	//Actualizar el mapa de bits de datos y de inodos
@@ -307,28 +296,33 @@ int openFile(char *fileName)
 		perror("El tamaño del nombre es incorrecto");
 		return -2;
 	} 
-	short indiceFichero = existeFichero(fileName);
-	if (indiceFichero == -1) {
+	
+	//Compruebo la existencia del fichero, y guardo su identificador de nodo
+	short inodoFichero = existeFichero(fileName);
+	if (inodoFichero == -1) {
 		perror("El fichero no existe");
 		return -1;
 	}
-	if( strcmp(fileDescriptor[indiceFichero].nombre, fileName) == 0){
-		perror("el fichero ya está abierto");
-		return -2;
-	}
-
-	memcpy(fileDescriptor[indiceFichero].nombre, fileName, strlen (fileName));
-	fileDescriptor[indiceFichero].punteroRW = 0;
-	fileDescriptor[indiceFichero].punteroArchivo = malloc(BLOCK_SIZE);
-	if (bread(DEVICE_IMAGE, inodos[indiceFichero].referencia [0], fileDescriptor[indiceFichero].punteroArchivo)){
-		perror("Error de la lectura");
-		return -1;
-	}
 	
-	//añadir una funcion para leer el op
-	printf("%s, %s, %i", fileDescriptor[indiceFichero].nombre, fileDescriptor[indiceFichero].punteroArchivo, fileDescriptor[indiceFichero].punteroRW);
+	//Compruebo si ya existe en el sistema
+	int fd = searchFD(fileName);
+	//Si ya existe, devuelvo el descritor donde está abierto
+	if(fd != -1) return fd;
+	
+	//Busco un fd vacio
+	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
+		if(strcmp(fileDescriptor[i].nombre, "") == 0){
+			fd = i;
+			break;
+		}
+	}
 
-	return 0;
+	//Hago todo lo necesario para abrir el fichero en memoria
+	memcpy(fileDescriptor[fd].nombre, fileName, strlen (fileName));
+	fileDescriptor[fd].punteroRW = 0;	
+	fileDescriptor[fd].punteroInodo = &inodos[inodoFichero];
+
+	return fd;
 }
 
 
@@ -338,19 +332,81 @@ int openFile(char *fileName)
  * Entrada: descriptor de archivos
  * Salida: o si es correcto y -1 si es erronea
 */
-int closeFile(int fileDescriptor) {
-	//puntero int* datos = fd, 
-	//free datos
+int closeFile(int file_Descriptor) {
 
+	//Compruebo si el valor que me han pasado es correcto
+	if(file_Descriptor >48 || file_Descriptor<0){
+		perror("Descriptor de fichero invalido");
+		return -1;
+	}
 
-	return -1;
+	//Compruebo que el fichero está abierto
+	if(strcmp(fileDescriptor[file_Descriptor].nombre, "") == 0){
+		perror("No está abierto ese fichero");
+		return -1;
+	}
+
+	//Formateo la estructura del descriptor de ficheros elegida.
+	memcpy(fileDescriptor[file_Descriptor].nombre, "", sizeof "");
+	fileDescriptor[file_Descriptor].punteroRW = 0;
+	fileDescriptor[file_Descriptor].punteroInodo = NULL;
+	return 0;
 }
 
 
-
-int readFile(int fileDescriptor, void *buffer, int numBytes)
+/**
+ * Leo la cantidad de bytes que quiere el usuario
+ * Entrada: descriptor de fichero, un buffer, y el tamaño de bytes que se quiere leer
+ * Salida: -1 si es un error, o los bytes leidos
+*/
+int readFile(int file_Descriptor, void *buffer, int numBytes)
 {
-	return -1;
+	if(numBytes>LIMITE_TAMANO){
+		perror("Error, el tamaño dado es mayor que el tamaño máximo de archivo");
+		return -1;
+	}
+	//Creo un nuevo lector para grabar lo que obtengo de disco
+	char* lecturaBloques = malloc (LIMITE_TAMANO);
+	//Variables:
+	int punteroR = fileDescriptor[file_Descriptor].punteroRW;
+	int numBytesLeidos = 0; //Los bytes que obtengo al leer de disco
+	int indiceBloque = 0; //El indice del bloque que leo del archivo desde el inodo
+	int bloqueLeido = -1; //El bloque que leo de disco
+	//Último bloque del disco, significa que es el fin del fichero
+	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
+	//Mientras no supere los bytes leidos de disco de los bytes del usuario
+	while(numBytesLeidos < numBytes){
+		// Consigo el bloque de disco que quiero leer
+		bloqueLeido = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[indiceBloque];
+		//Compruebo que no es el fin del fichero
+		if( bloqueLeido == bloqueEOF )break;
+		//Leo de disco para conseguir el bloque y lo añado a nuestro char
+		if( bread(DEVICE_IMAGE, bloqueLeido, lecturaBloques + numBytesLeidos) == -1){
+			perror("Error al leer de disco");
+			return -1;
+		}
+		//Actualizo el número de bytes que he ledio de disco
+		numBytesLeidos = numBytesLeidos + strlen(lecturaBloques);
+		//Actualizo el indice de bloques para obtener el siguiente bloque
+		indiceBloque = indiceBloque + 1;
+	}
+
+	if(numBytesLeidos < numBytes) {
+		//En el caso de que el numero de bytes leidos sea menor que el que me piden
+		memcpy(buffer, lecturaBloques + punteroR, numBytesLeidos);
+	}else{
+		//En el caso de que leamos más de disco de lo que pide el usuario
+		memcpy(buffer, lecturaBloques + punteroR, numBytes);
+		//Y actualizo la variable de bytes copiados
+		numBytesLeidos = numBytes;
+	}
+	//Actualizo el puntero
+	fileDescriptor[file_Descriptor].punteroRW = punteroR;
+	//Libero memoria del char utilizado para copiar los bloques
+	free(lecturaBloques);
+	lecturaBloques = NULL;
+	//Devuelvo los bloques leidos
+	return numBytesLeidos;
 }
 
 
@@ -359,9 +415,9 @@ int readFile(int fileDescriptor, void *buffer, int numBytes)
  * @brief	Writes a number of bytes from a buffer and into a file.
  * @return	Number of bytes properly written, -1 in case of error.
  */
-int writeFile(int fileDescriptor, void *buffer, int numBytes)
+int writeFile(int file_Descriptor, void *buffer, int numBytes)
 {
-	return -1;
+	return 0;
 }
 
 
@@ -486,7 +542,7 @@ int existeFichero(char* fileName){
 */
 int searchFD(char* fileName){
 	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
-		if(strcmp(fileDescriptor[i].nombre, fileName)){
+		if(strcmp(fileDescriptor[i].nombre, fileName)== 0){
 			return i;
 		}
 	}
@@ -670,3 +726,33 @@ void printfInodo(){
 													inodos[indice].tamano, inodos[indice].integridad);
 	}
 }
+
+
+
+/**
+ * Lee el total del descriptor de ficheros y lo imprime
+ * Entrada: nada
+ * Salida: nada
+*/
+void printfFD(){
+	for(int i = 0; i< sizeof fileDescriptor/ sizeof fileDescriptor[0]; i++){
+		printf("FD num %i: %s, %i\n", i, fileDescriptor[i].nombre, fileDescriptor[i].punteroRW);
+	}
+}
+
+
+
+/**
+ * Escribe en panalla un mapa otorgado
+ * Entrada: el mapa a leer
+ * Salida: nada
+*/
+void printfMapa(int mapa){
+	char * mapaElegido;
+	if(mapa == 1) mapaElegido = i_map;
+	if(mapa == 2) mapaElegido = b_map;
+	for(int i = 0; i<sizeof mapaElegido; i++){
+		printf("%hu", bitmap_getbit(mapaElegido,i));
+	}printf("\n");
+
+	}
