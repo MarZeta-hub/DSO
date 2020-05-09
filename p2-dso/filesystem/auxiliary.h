@@ -49,5 +49,9 @@ int checkTamanoNombre(char* fileName);
 //Para buscar un fichero en el fd
 int searchFD(char* fileName);
 
+//Comprueba si un fichero tiene integridad
+int tieneIntegridad(short fd);
+
 //Se utiliza para sincronizar los cambios con el disco
 int syncDisk();
+
