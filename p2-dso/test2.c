@@ -75,7 +75,7 @@ int main()
 
 	char buffer[4096];
 
-	lseekFile(0,-200,0);
+	lseekFile(0,0,1);
 
 	ret = readFile(0, buffer, 4096);
 	printf("\n Leido: %i,   %s \n\n ", ret, buffer);

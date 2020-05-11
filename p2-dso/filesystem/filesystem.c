@@ -405,6 +405,7 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 	numBytesLeidos = numBytesLeidos - punteroR;
 	lecturaBloques = lecturaBloques + punteroR;	
 	memcpy(buffer, lecturaBloques, strlen(lecturaBloques));
+	lecturaBloques = NULL;
 	free(lecturaBloques);
 	//Actualizo el puntero
 	fileDescriptor[file_Descriptor].punteroRW = punteroR;
@@ -464,8 +465,8 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
 	punteroW = punteroW + numBytes;
 	fileDescriptor[file_Descriptor].punteroRW = punteroW;
 	int tamanoFichero = fileDescriptor[file_Descriptor].punteroInodo[0].tamano;
-	//free(contenidoDisco);
-
+	contenidoDisco = NULL;
+	free(contenidoDisco);
 	if(punteroW > tamanoFichero){
 		fileDescriptor[file_Descriptor].punteroInodo[0].tamano = punteroW;
 		fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia + 1] = bloqueEOF;
