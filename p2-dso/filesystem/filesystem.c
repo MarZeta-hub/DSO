@@ -272,8 +272,10 @@ int removeFile(char *fileName)
 	}
 
 	//Elimino el fd si tiene uno
-	closeFile(searchFD(fileName));
-
+	if(searchFD(fileName)!=-1){
+		closeFile(searchFD(fileName));
+	}
+	
 	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
 
 	for(int i = 0; i< 5; i++){
@@ -325,7 +327,7 @@ int openFile(char *fileName)
 			break;
 		}
 	}
-	if(fd != -1){
+	if(fd == -1){
 		perror("Máximo de archivos abiertos alcanzado");
 		return -1;
 	} 
@@ -379,6 +381,12 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 		perror("Error, el tamaño más la posición actual del puntero es mayor que el tamaño máximo de archivo");
 		return -1;
 	}
+	printf("%li, %i ",sizeof(buffer) / sizeof(buffer[0]), numBytes);
+	if(numBytes>sizeof(buffer)){
+		perror("El número de bytes que se desea leer excede el tamaño del buffer");
+		return -1;
+	}
+
 	//Creo un nuevo lector para grabar lo que obtengo de disco
 	char* lecturaBloques = malloc ( LIMITE_TAMANO );
 	//Variables:
