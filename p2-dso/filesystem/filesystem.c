@@ -395,18 +395,17 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 			perror("Error al leer de disco");
 			return -1;
 		}
-		printf("\n%s \nFIN \n", lecturaBloques);
 		//Actualizo el número de bytes que he ledio de disco
 		numBytesLeidos = strlen(lecturaBloques) + numBytesLeidos;
-		printf("%i", numBytesLeidos);
 		//Actualizo el indice de bloques para obtener el siguiente bloque
 		indiceBloque = indiceBloque + 1;
 	}
-	
+
 	//En el caso de que el numero de bytes leidos sea menor que el que me piden
 	numBytesLeidos = numBytesLeidos - punteroR;
 	lecturaBloques = lecturaBloques + punteroR;
 	memcpy(buffer, lecturaBloques, strlen(lecturaBloques));
+	free(lecturaBloques);
 	//Actualizo el puntero
 	fileDescriptor[file_Descriptor].punteroRW = punteroR;
 	//Devuelvo los bloques leidos
@@ -431,16 +430,16 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
 	int obtenerReferencia = punteroW / BLOCK_SIZE ; 
 	int bloquesNecesarios = (numBytes / BLOCK_SIZE) + 1;
 	char* contenidoDisco = malloc (bloquesNecesarios * BLOCK_SIZE);
-	if( readFile(file_Descriptor, contenidoDisco, bloquesNecesarios * BLOCK_SIZE) == -1) return -1;
+	//if( readFile(file_Descriptor, contenidoDisco, bloquesNecesarios * BLOCK_SIZE) == -1) return -1;
 	int punteroCD = punteroW - obtenerReferencia * BLOCK_SIZE;
 	memcpy(contenidoDisco + punteroCD, buffer, numBytes);
-
+	
 	//ESCRITURA DEL CONTENIDO ACTUALIZADO AL DISCO
 	short nuevoBloque = 0;
 	short lugarBloque = -1;
-	short punteroEscritura = 0;
+	int punteroEscritura = 0;
+
 	for(int bloqueActual = 0; bloqueActual < bloquesNecesarios; bloqueActual++){
-		//punteroEscritura = bloqueActual * BLOCK_SIZE;
 		obtenerReferencia = obtenerReferencia + bloqueActual;
 		if(nuevoBloque == 0) lugarBloque = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia];
 		if(lugarBloque == bloqueEOF) nuevoBloque = 1;
@@ -454,15 +453,18 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
 				}
 			}
 		}
-		printf("lugar bloque %i, contenido: %s \n\n", lugarBloque,contenidoDisco);
 		if( bwrite(DEVICE_IMAGE, lugarBloque, contenidoDisco + punteroEscritura) != 0){
 			perror("Error al escribir en el archivo");
-		return -1;
+			return -1;
 		}
+		punteroEscritura = punteroEscritura + BLOCK_SIZE;
 	}
+
 	punteroW = punteroW + numBytes;
 	fileDescriptor[file_Descriptor].punteroRW = punteroW;
-	int tamanoFichero = fileDescriptor[file_Descriptor].punteroInodo[0].tamano ;
+	int tamanoFichero = fileDescriptor[file_Descriptor].punteroInodo[0].tamano;
+	//free(contenidoDisco);
+
 	if(punteroW > tamanoFichero){
 		fileDescriptor[file_Descriptor].punteroInodo[0].tamano = punteroW;
 		fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia + 1] = bloqueEOF;
@@ -759,7 +761,7 @@ void createSuperBloque(int tamanoDisco, char* contenidoSB){
 	sbloque[0].primerInodo = 3;	//El primer bloque de inodos SuperBloque 0, Mapa 1 y mapa 2
 	sbloque[0].numBloquesMapaInodos = BLOCKS_MAP_INODO; //el mapa de nodos para conocer si está libre o no el nodo
 	sbloque[0].numBloquesInodos =  48; //El número de bloques de inodos solo puede haber hasta 48 inodos
-	sbloque[0].primerBloqueDatos = sbloque[0].numBloquesInodos + sbloque[0].primerInodo -1; //El primer bloque de datos
+	sbloque[0].primerBloqueDatos = sbloque[0].numBloquesInodos + sbloque[0].primerInodo; //El primer bloque de datos
 	sbloque[0].numBloquesMapaDatos = BLOCKS_MAPS_DATA;  //el mapa de nodos para conocer si está libre o no el bloque de datos
 	sbloque[0].numBloquesDatos =  numBloques - sbloque[0].numBloquesInodos - 3;// quitar el superbloques y los dos bloques de mapas al total
 	sbloque[0].tamDispositivo = tamanoDisco;	// EL tamano de la partición
