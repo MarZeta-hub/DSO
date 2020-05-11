@@ -325,7 +325,10 @@ int openFile(char *fileName)
 			break;
 		}
 	}
-
+	if(fd != -1){
+		perror("Máximo de archivos abiertos alcanzado");
+		return -1;
+	} 
 	//Hago todo lo necesario para abrir el fichero en memoria
 	memcpy(fileDescriptor[fd].nombre, fileName, strlen (fileName));
 	fileDescriptor[fd].punteroRW = 0;	
@@ -420,8 +423,7 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
  * @return	Number of bytes properly written, -1 in case of error.
  */
 int writeFile(int file_Descriptor, void *buffer, int numBytes)
-{
-		
+{	
 	int punteroW = fileDescriptor[file_Descriptor].punteroRW;
 	short bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
 	if(numBytes + punteroW > LIMITE_TAMANO){
