@@ -715,7 +715,45 @@ int closeFileIntegrity(int file_Descriptor)
  */
 int createLn(char *fileName, char *linkName)
 {
-    return -1;
+	if( checkTamanoNombre(linkName) != 0 ){
+		perror("El nombre del link es erroneo"); 
+		return -2;
+	}
+
+	if(checkTamanoNombre(fileName) != 0){
+		perror("El nombre del link es erroneo"); 
+		return -2;
+	}
+
+	int inodoFichero = existeFichero(fileName);
+
+	if(inodoFichero == -1){
+		perror("No existe el archivo");
+		return -1;
+	}
+	
+	//Busco un inodo que este libre
+	int inodo_libre=-1;
+	for(int i=0; i<sbloque[0].numBloquesInodos; i++){
+		if(bitmap_getbit(i_map,i) ==0){
+			inodo_libre = i;
+			break;
+		}
+	}
+
+	//En el caso de que no exista un inodo libre
+	if(inodo_libre == -1){
+		perror("No hay i-nodos libres");
+		return -2;
+	}
+
+	//CREAR EL INODO
+	bitmap_setbit(i_map, inodo_libre, 1); //Ocupo en el mapa de bits el nuevo bloque
+	inodos[inodo_libre] = inodos[inodoFichero];
+	memset(inodos[inodo_libre].nomFichero, '\0', sizeof inodos[inodo_libre].nomFichero);;
+	memcpy(inodos[inodo_libre].nomFichero, linkName, strlen(linkName)); //le añado el nuevo nombre
+	sbloque[0].numFicheros = sbloque[0].numFicheros + 1;
+    return 0;
 }
 
 
@@ -726,7 +764,27 @@ int createLn(char *fileName, char *linkName)
  */
 int removeLn(char *linkName)
 {
-    return -2;
+	//Comprobar si el tamaño del nombre es correcto
+	if(checkTamanoNombre(linkName) != 0) return -2;
+    //Busco donde está el fichero
+	short indiceFichero = existeFichero(linkName);
+	//Buscar el inodo con el nombre if si no existe return -1
+	if (indiceFichero == -1) {
+		perror("El fichero no existe");
+		return -1;
+	}
+
+	//Elimino el fd si tiene uno
+	int fd = searchFD(linkName);
+	if(fd != -1){
+		closeFile(fd);
+	}
+
+	//Formateo el nodo
+	memset(inodos[indiceFichero].nomFichero, '\0', sizeof inodos[indiceFichero].nomFichero);
+	sbloque[0].numFicheros = sbloque[0].numFicheros - 1;
+	bitmap_setbit(i_map, indiceFichero,0);
+    return 0;
 }
 
 

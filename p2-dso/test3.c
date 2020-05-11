@@ -38,15 +38,36 @@ int main()
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST mountFS ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
 
-/*
-    ret = openFile("/test.txt");
+    ret = createLn("/test.txt", "HOLITA");
+	if (ret != 0)
+	{
+		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST createLN ", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
+		return -1;
+	}
+	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST createLN ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
+
+
+
+    ret = openFile("HOLITA");
     if (ret == -1)
 	{
 		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST openFile", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
 		return -1;
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST openFile ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
-*/
+
+    char * buffer = malloc (2048);
+    readFile(ret,buffer, 2048);
+    printf("%s\n", buffer);
+
+/*    ret = removeLn("HOLITA");
+    if (ret == -1 || ret == -2 || ret == -3)
+	{
+		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST removeLN ", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
+		return -1;
+	}
+	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST removeln ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
+   */ 
 /*
     ret = openFileIntegrity("/test.txt");
     if (ret == -1 || ret == -2 || ret == -3)
@@ -65,7 +86,7 @@ int main()
 		return -1;
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST closeFile ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
-  */
+*/
 
 
  /*  ret = closeFileIntegrity(ret);
@@ -87,7 +108,7 @@ int main()
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST includeIntegrity ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
 */
 
-
+/*
     ret = checkFile("/test.txt");
     if (ret != 0)
 	{
@@ -95,7 +116,7 @@ int main()
 		return -1;
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST TESTcheckFile", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
-
+*/
 
 
 	////////
