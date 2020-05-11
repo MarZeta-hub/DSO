@@ -370,12 +370,12 @@ int closeFile(int file_Descriptor) {
 */
 int readFile(int file_Descriptor, void *buffer, int numBytes)
 {
+	
 	int punteroR = fileDescriptor[file_Descriptor].punteroRW;
 	if(numBytes + punteroR > LIMITE_TAMANO){
 		perror("Error, el tamaño más la posición actual del puntero es mayor que el tamaño máximo de archivo");
 		return -1;
 	}
-	
 	//Creo un nuevo lector para grabar lo que obtengo de disco
 	char* lecturaBloques = malloc ( LIMITE_TAMANO );
 	//Variables:
@@ -396,14 +396,14 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 			return -1;
 		}
 		//Actualizo el número de bytes que he ledio de disco
-		numBytesLeidos = strlen(lecturaBloques) + numBytesLeidos;
+		numBytesLeidos = strlen(lecturaBloques);
 		//Actualizo el indice de bloques para obtener el siguiente bloque
 		indiceBloque = indiceBloque + 1;
 	}
 
 	//En el caso de que el numero de bytes leidos sea menor que el que me piden
 	numBytesLeidos = numBytesLeidos - punteroR;
-	lecturaBloques = lecturaBloques + punteroR;
+	lecturaBloques = lecturaBloques + punteroR;	
 	memcpy(buffer, lecturaBloques, strlen(lecturaBloques));
 	free(lecturaBloques);
 	//Actualizo el puntero
@@ -420,6 +420,7 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
  */
 int writeFile(int file_Descriptor, void *buffer, int numBytes)
 {
+		
 	int punteroW = fileDescriptor[file_Descriptor].punteroRW;
 	short bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
 	if(numBytes + punteroW > LIMITE_TAMANO){

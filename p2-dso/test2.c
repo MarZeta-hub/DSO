@@ -68,11 +68,15 @@ int main()
 	{
 		fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST write ", ANSI_COLOR_RED, "FAILED\n", ANSI_COLOR_RESET);
 		return -1;
+			
 	}
+	
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST write ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
 
-
 	char buffer[4096];
+
+	lseekFile(0,-200,0);
+
 	ret = readFile(0, buffer, 4096);
 	printf("\n Leido: %i,   %s \n\n ", ret, buffer);
 	if (ret == -1)
