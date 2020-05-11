@@ -246,6 +246,7 @@ int createFile(char *fileName)
 	//CREAR EL INODO
 	memcpy(inodos[inodo_libre].nomFichero, fileName, strlen(fileName)); //le añado el nuevo nombre
 	bitmap_setbit(i_map, inodo_libre, 1); //Ocupo en el mapa de bits el nuevo bloque
+	inodos[inodo_libre].referencia[0] = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
 	sbloque[0].numFicheros = sbloque[0].numFicheros + 1; //Añado al superbloque un nuevo archivo
 
 	return 0;
@@ -273,11 +274,18 @@ int removeFile(char *fileName)
 	//Elimino el fd si tiene uno
 	closeFile(searchFD(fileName));
 
+	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
+
+	for(int i = 0; i< 5; i++){
+		int bloqueDatos = inodos[indiceFichero].referencia[i];
+		if(bloqueDatos == bloqueEOF) break;
+		bitmap_setbit(b_map, bloqueDatos - sbloque[0].primerBloqueDatos , 0);
+	}
+
 	//Formateo el nodo
 	inodoVacio(indiceFichero);
 	//Actualizar el mapa de bits de datos y de inodos
 	bitmap_setbit(i_map, indiceFichero,0);
-	bitmap_setbit(b_map,indiceFichero,0);
 	sbloque[0].numFicheros = sbloque[0].numFicheros - 1;
 
 	return 0;
@@ -364,9 +372,10 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 {
 	int punteroR = fileDescriptor[file_Descriptor].punteroRW;
 	if(numBytes + punteroR > LIMITE_TAMANO){
-		perror("Error, el tamaño dado es mayor que el tamaño máximo de archivo");
+		perror("Error, el tamaño más la posición actual del puntero es mayor que el tamaño máximo de archivo");
 		return -1;
 	}
+	
 	//Creo un nuevo lector para grabar lo que obtengo de disco
 	char* lecturaBloques = malloc ( LIMITE_TAMANO );
 	//Variables:
@@ -386,26 +395,20 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 			perror("Error al leer de disco");
 			return -1;
 		}
+		printf("\n%s \nFIN \n", lecturaBloques);
 		//Actualizo el número de bytes que he ledio de disco
-		numBytesLeidos = numBytesLeidos + strlen(lecturaBloques);
+		numBytesLeidos = strlen(lecturaBloques) + numBytesLeidos;
+		printf("%i", numBytesLeidos);
 		//Actualizo el indice de bloques para obtener el siguiente bloque
 		indiceBloque = indiceBloque + 1;
 	}
-
-	if(numBytesLeidos < numBytes) {
-		//En el caso de que el numero de bytes leidos sea menor que el que me piden
-		memcpy(buffer, lecturaBloques + punteroR, numBytesLeidos);
-	}else{
-		//En el caso de que leamos más de disco de lo que pide el usuario
-		memcpy(buffer, lecturaBloques + punteroR, numBytes);
-		//Y actualizo la variable de bytes copiados
-		numBytesLeidos = numBytes;
-	}
+	
+	//En el caso de que el numero de bytes leidos sea menor que el que me piden
+	numBytesLeidos = numBytesLeidos - punteroR;
+	lecturaBloques = lecturaBloques + punteroR;
+	memcpy(buffer, lecturaBloques, strlen(lecturaBloques));
 	//Actualizo el puntero
 	fileDescriptor[file_Descriptor].punteroRW = punteroR;
-	//Libero memoria del char utilizado para copiar los bloques
-	free(lecturaBloques);
-	lecturaBloques = NULL;
 	//Devuelvo los bloques leidos
 	return numBytesLeidos;
 }
@@ -419,7 +422,7 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 int writeFile(int file_Descriptor, void *buffer, int numBytes)
 {
 	int punteroW = fileDescriptor[file_Descriptor].punteroRW;
-	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
+	short bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
 	if(numBytes + punteroW > LIMITE_TAMANO){
 		numBytes = LIMITE_TAMANO - (numBytes + punteroW);
 	}
@@ -431,31 +434,31 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
 	if( readFile(file_Descriptor, contenidoDisco, bloquesNecesarios * BLOCK_SIZE) == -1) return -1;
 	int punteroCD = punteroW - obtenerReferencia * BLOCK_SIZE;
 	memcpy(contenidoDisco + punteroCD, buffer, numBytes);
-	printf("bloquesNecesarios: %i, punteroCD: %i, punteroW: %i, %s\n", bloquesNecesarios, punteroCD, punteroW, contenidoDisco);
 
 	//ESCRITURA DEL CONTENIDO ACTUALIZADO AL DISCO
 	short nuevoBloque = 0;
 	short lugarBloque = -1;
 	short punteroEscritura = 0;
 	for(int bloqueActual = 0; bloqueActual < bloquesNecesarios; bloqueActual++){
+		//punteroEscritura = bloqueActual * BLOCK_SIZE;
 		obtenerReferencia = obtenerReferencia + bloqueActual;
 		if(nuevoBloque == 0) lugarBloque = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia];
 		if(lugarBloque == bloqueEOF) nuevoBloque = 1;
 		if(nuevoBloque == 1){
 			for(int i = 0; i < sbloque[0].numBloquesDatos; i++){
-				if(bitmap_getbit(b_map, i) == 0){
-					lugarBloque = bitmap_getbit(b_map, i);
-					fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia] = lugarBloque + sbloque[0].primerBloqueDatos;
+				if( bitmap_getbit(b_map, i) == 0){
+					lugarBloque = i + sbloque[0].primerBloqueDatos ;
+					fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia] = lugarBloque;
 					bitmap_setbit(b_map, i, 1);
 					break;
 				}
 			}
 		}
-	if( bwrite(DEVICE_IMAGE,lugarBloque, contenidoDisco + punteroEscritura) != 0){
-		perror("Error al escribir en el archivo");
+		printf("lugar bloque %i, contenido: %s \n\n", lugarBloque,contenidoDisco);
+		if( bwrite(DEVICE_IMAGE, lugarBloque, contenidoDisco + punteroEscritura) != 0){
+			perror("Error al escribir en el archivo");
 		return -1;
-	}
-	punteroEscritura = bloqueActual * BLOCK_SIZE;
+		}
 	}
 	punteroW = punteroW + numBytes;
 	fileDescriptor[file_Descriptor].punteroRW = punteroW;

@@ -38,7 +38,7 @@ void printfInodo();
 void printfFD();
 
 //Para leer un mapa de bits
-void printMap(int mapa);
+void printfMapa(int mapa);
 
 //Para buscar si el fichero ya existe 
 int existeFichero(char* fileName);
