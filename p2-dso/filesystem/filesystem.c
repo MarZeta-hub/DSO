@@ -13,6 +13,7 @@
 #include "filesystem/metadata.h"   // Type and structure declaration of the file system
 #include <string.h>
 #include <stdlib.h>
+#include "math.h"
 
 /*
  * Genera la estructura del sistema de ficheros disenada.
@@ -36,7 +37,7 @@ int mkFS(long deviceSize)
 	for( int i; i<sbloque[0].numBloquesInodos; i++){
 		bitmap_setbit(i_map, i, 0);
 	}
-	//para agregar el MAPA DE INODOS
+	//MAPA DE INODOS
 	if( bwrite(DEVICE_IMAGE, 1, i_map) == -1) {
 		perror("Fallo al escribir el BitMap de inodos\n");
 		return -1; //En caso de que de fallo la escritura
@@ -68,7 +69,7 @@ int mkFS(long deviceSize)
  	inodos = malloc(sizeof inodos[0]); //añado espacio
 	inodoVacio(0); //creo un inodo vacio
 	inodotoChar(contenido, 0); //Añadir todos el contenido al nodo
-	//Escribo el contenido del superbloque en el primer bloque
+	//Empiezo a formatear todos los inodos
 	for (int i = 0; i < sbloque[0].numBloquesInodos; i++){
 		if( bwrite(DEVICE_IMAGE, sbloque[0].primerInodo + i, contenido) == -1) {
 			perror("Fallo al formatear los INODOS mkFS\n");
@@ -361,14 +362,14 @@ int closeFile(int file_Descriptor) {
 */
 int readFile(int file_Descriptor, void *buffer, int numBytes)
 {
-	if(numBytes>LIMITE_TAMANO){
+	int punteroR = fileDescriptor[file_Descriptor].punteroRW;
+	if(numBytes + punteroR > LIMITE_TAMANO){
 		perror("Error, el tamaño dado es mayor que el tamaño máximo de archivo");
 		return -1;
 	}
 	//Creo un nuevo lector para grabar lo que obtengo de disco
-	char* lecturaBloques = malloc (LIMITE_TAMANO);
+	char* lecturaBloques = malloc ( LIMITE_TAMANO );
 	//Variables:
-	int punteroR = fileDescriptor[file_Descriptor].punteroRW;
 	int numBytesLeidos = 0; //Los bytes que obtengo al leer de disco
 	int indiceBloque = 0; //El indice del bloque que leo del archivo desde el inodo
 	int bloqueLeido = -1; //El bloque que leo de disco
@@ -417,50 +418,53 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
  */
 int writeFile(int file_Descriptor, void *buffer, int numBytes)
 {
-		if(numBytes>LIMITE_TAMANO){
-		perror("Error, el tamaño dado es mayor que el tamaño máximo de archivo");
-		return -1;
+	int punteroW = fileDescriptor[file_Descriptor].punteroRW;
+	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
+	if(numBytes + punteroW > LIMITE_TAMANO){
+		numBytes = LIMITE_TAMANO - (numBytes + punteroW);
 	}
 
-	//Creo un nuevo lector para grabar lo que obtengo de disco
-	char* escrituraBloques = malloc (numBytes); 
-	//Variables:
-	int punteroW = fileDescriptor[file_Descriptor].punteroRW;
-	int numBytesEscritos = 0; //Los bytes que obtengo al escribir en disco
-	int indiceBloque = 0; //El indice del bloque que escribo en el archivo desde el inodo
-	int bloqueEscrito = -1; //El bloque que escribo de disco
-	int bloquesNecesarios = numBytes/BLOCK_SIZE; //Número de bloques necesarios para almacenar la información a escribir
-	//Último bloque del disco, significa que es el fin del fichero
-	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
-	int referencias=0;
-	while(referencias < bloquesNecesarios){
-		for(int i=0; i<sbloque.numBloques; i++;){
-			if(bitmap_getbit(b_map,i )){
-				bloqueEscrito=file_Descriptor[file_Descriptor].punteroInodo[0].referencia[referencia];
-				bwrite(DEVICE_IMAGE, bloqueEscrito, numBytesEscritos + referencia*2048))	
-				numBytesEscritos = numBytesEscritos + referencia*2048;
-				referencia = referencia +1;	
-				if(numBytesEscritos==numBytes || referencias<bloquesNecesarios)break;	
+	//LECTURA DEL CONTENIDO DEL DISCO QUE HAY QUE MODIFICAR
+	int obtenerReferencia = punteroW / BLOCK_SIZE ; 
+	int bloquesNecesarios = (numBytes / BLOCK_SIZE) + 1;
+	char* contenidoDisco = malloc (bloquesNecesarios * BLOCK_SIZE);
+	if( readFile(file_Descriptor, contenidoDisco, bloquesNecesarios * BLOCK_SIZE) == -1) return -1;
+	int punteroCD = punteroW - obtenerReferencia * BLOCK_SIZE;
+	memcpy(contenidoDisco + punteroCD, buffer, numBytes);
+	printf("bloquesNecesarios: %i, punteroCD: %i, punteroW: %i, %s\n", bloquesNecesarios, punteroCD, punteroW, contenidoDisco);
+
+	//ESCRITURA DEL CONTENIDO ACTUALIZADO AL DISCO
+	short nuevoBloque = 0;
+	short lugarBloque = -1;
+	short punteroEscritura = 0;
+	for(int bloqueActual = 0; bloqueActual < bloquesNecesarios; bloqueActual++){
+		obtenerReferencia = obtenerReferencia + bloqueActual;
+		if(nuevoBloque == 0) lugarBloque = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia];
+		if(lugarBloque == bloqueEOF) nuevoBloque = 1;
+		if(nuevoBloque == 1){
+			for(int i = 0; i < sbloque[0].numBloquesDatos; i++){
+				if(bitmap_getbit(b_map, i) == 0){
+					lugarBloque = bitmap_getbit(b_map, i);
+					fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia] = lugarBloque + sbloque[0].primerBloqueDatos;
+					bitmap_setbit(b_map, i, 1);
+					break;
+				}
 			}
 		}
+	if( bwrite(DEVICE_IMAGE,lugarBloque, contenidoDisco + punteroEscritura) != 0){
+		perror("Error al escribir en el archivo");
+		return -1;
 	}
-
-	if(numBytesEscritos < numBytes) {
-		//En el caso de que el numero de bytes escritos sea menor que el que me piden
-		memcpy(buffer + punteroW, buffer, numBytesEscritos);
-	}else{
-		//En el caso de que escribamos más de disco de lo que pide el usuario
-		memcpy(buffer + punteroW, buffer,  numBytes);
-		//Y actualizo la variable de bytes copiados
-		numBytesEscritos = numBytes;
+	punteroEscritura = bloqueActual * BLOCK_SIZE;
 	}
-	//Actualizo el puntero
+	punteroW = punteroW + numBytes;
 	fileDescriptor[file_Descriptor].punteroRW = punteroW;
-	//Libero memoria del char utilizado para copiar los bloques
-	free(buffer);
-	buffer = NULL;
-	//Devuelvo los bloques escritos
-	return numBytesEscritos;
+	int tamanoFichero = fileDescriptor[file_Descriptor].punteroInodo[0].tamano ;
+	if(punteroW > tamanoFichero){
+		fileDescriptor[file_Descriptor].punteroInodo[0].tamano = punteroW;
+		fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia + 1] = bloqueEOF;
+	}
+	return numBytes;
 }
 
 
@@ -471,21 +475,20 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
  */
 int lseekFile(int file_Descriptor, long offset, int whence)
 {
-	if(strcmp(file_Descriptor.nombre,"")==0 || file_Descriptor<0 || file_Descriptor>48){//COmprobamos el fd pasado
+	if(strcmp(fileDescriptor[file_Descriptor].nombre,"")==0 || file_Descriptor<0 || file_Descriptor>48){//COmprobamos el fd pasado
 		perror("El descriptor de fichero no existe");
 		return -1;
 	}
-
-	switch (whence):
+	short nuevaPosicion;
+	switch (whence)
 	{
 	case 0: //FS_SEEK_CUR  DESDE LA POSICION ACTUAL
-		short nuevaPosicion = fileDescriptor[file_Descriptor].punteroRW + offset;
-
-		if(nuevaPosicion<0 || nuevaPosicion>fileDescriptor[file_Descriptor].punteroInodo[0].tamano){//Comprobamos que la nueva posicion del puntero no exceda los limites del fichero
+		 nuevaPosicion = fileDescriptor[file_Descriptor].punteroRW + offset;
+		if(nuevaPosicion<0 || nuevaPosicion > fileDescriptor[file_Descriptor].punteroInodo[0].tamano){//Comprobamos que la nueva posicion del puntero no exceda los limites del fichero
 			perror("El offset introucido excede los limites del fichero");
 			return -1;
 		}
-		fileDescriptor[file_Descriptor].punteroRW=nuevaPosicion;
+		fileDescriptor[file_Descriptor].punteroRW = nuevaPosicion;
 		break;
 	case 1: //FS_SEEK _BEGIN DESDE EL INICIO
 
@@ -513,6 +516,7 @@ int lseekFile(int file_Descriptor, long offset, int whence)
 
 int checkFile (char * fileName)
 {
+	/*
 	if(checkTamanoNombre!=0){//comprobamos el nombre
 		perror("El tamaño del nombre no es valido");
 		return -2;
@@ -534,7 +538,6 @@ int checkFile (char * fileName)
 		return -2;
 	}
 
-
 	char buffer[fileDescriptor[fd].punteroInodo[0].tamano];
 	readFile(fd, buffer, tamanoFichero);//Leemos el fichero
 	
@@ -546,6 +549,7 @@ int checkFile (char * fileName)
 	}
 
 	closeFile(fd);//Cerramos el archivo
+	*/
     return 0;
 }
 
@@ -558,6 +562,7 @@ int checkFile (char * fileName)
 
 int includeIntegrity (char * fileName)
 {
+	/*
     if(checkTamanoNombre!=0){//comprobamos el nombre
 		perror("El tamaño del nombre no es valido");
 		return -2;
@@ -588,6 +593,7 @@ int includeIntegrity (char * fileName)
 	fileDescriptor[fd].punteroInodo[0].integridad=CRC;//Establecemos el CRC creado
 
 	closeFile(fd);
+	*/
 	return 0;
 }
 
@@ -599,6 +605,7 @@ int includeIntegrity (char * fileName)
  */
 int openFileIntegrity(char *fileName)///MIRAR ERRORES
 {	
+	/*
 	if(existeFichero(fileName)==-1){//Comprobamos si existe el fichero
 		perror("El fichero no existe");
 		return -1;		
@@ -611,7 +618,8 @@ int openFileIntegrity(char *fileName)///MIRAR ERRORES
 		return -2;		
 	}
 	openFile(fileName);
-    
+    */
+   return -1;
 }
 
 
@@ -620,19 +628,20 @@ int openFileIntegrity(char *fileName)///MIRAR ERRORES
  * @brief	Closes a file and updates its integrity.
  * @return	0 if success, -1 otherwise.
  */
-int closeFileIntegrity(int fileDescriptor)
+int closeFileIntegrity(int file_Descriptor)
 {
+	/*
 	if( file_Descriptor < 0 || file_Descriptor>48){//COmprobamos el fd pasado
 		perror("El descriptor de fichero no existe");
 		return -1;
 	}
 	
-	if(searchFD(fileDescriptor.nombre)==-1){//Si el archivo no estaba abierto error
+	if(searchFD(fileDescriptor[file_Descriptor].nombre)==-1){//Si el archivo no estaba abierto error
 		perror("El archivo no estaba abierto");
 		return -1;
 	}
 	
-	if(tieneIntegridad(fd)!=0){//Comprobamos si tiene integridad
+	if(tieneIntegridad(file_Descriptor)!=0){//Comprobamos si tiene integridad
 		perror("El fichero no tiene integridad");
 		return -1;
 	}
@@ -645,6 +654,7 @@ int closeFileIntegrity(int fileDescriptor)
 	fileDescriptor[fd].punteroInodo[0].integridad=CRC;//Establecemos el CRC creado
 
 	closeFile(fd);
+	*/
     return -1;
 }
 
@@ -725,8 +735,8 @@ int searchFD(char* fileName){
  * Salida: 0 si tiene integridad o -1 si no 
 */
 int tieneIntegridad(short fd){
-
-		if(strcmp(fileDescriptor[fd].punteroInodo[3],"")){
+	uint32_t integridad = fileDescriptor[fd].punteroInodo[3].integridad;
+		if( integridad == 0){
 			perror("El archivo no tiene integridad");
 			return -1;
 		}

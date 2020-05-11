@@ -45,7 +45,7 @@ char nomFichero[32]; //nombre del fichero
 unsigned short referencia[6]; //dirección del primer bloque de datos, solo se pueden tener 
                               //hasta 5 bloques enlazados ya que: 5*2KB = 10KB máximo tamaño de archivo
 unsigned short tamano; //tamano del fichero
-unsigned int integridad; //CRC de integridad
+uint32_t integridad; //CRC de integridad
 } TipoInodo;
 
 typedef struct {
