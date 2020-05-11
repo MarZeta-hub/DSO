@@ -154,6 +154,18 @@ int unmountFS(void)
 		perror("Error al sincronizar con el disco");
 		return -1;
 	} 
+	int fd = -1;
+	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
+		if(strcmp(fileDescriptor[i].nombre, "") == 0){
+			fd = i;
+			break;
+		}
+	}
+
+	if(fd == -1){
+		perror("No se puede desmontar el sistema, hay archivos abiertos");
+		return -1;
+	}
 
 	//Desmontamos los datos del disco en memoria
   	free(inodos);
@@ -359,6 +371,11 @@ int closeFile(int file_Descriptor) {
 		perror("No está abierto ese fichero");
 		return -1;
 	}
+	
+	if(fileDescriptor[file_Descriptor].abiertoConIntegridad == 1){
+		perror("El archivo ha sido abierto con comprobación de integridad");
+		return -1;
+	}
 
 	//Formateo la estructura del descriptor de ficheros elegida.
 	memcpy(fileDescriptor[file_Descriptor].nombre, "", sizeof "");
@@ -381,11 +398,10 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 		perror("Error, el tamaño más la posición actual del puntero es mayor que el tamaño máximo de archivo");
 		return -1;
 	}
-	printf("%li, %i ",sizeof(buffer) / sizeof(buffer[0]), numBytes);
-	if(numBytes>sizeof(buffer)){
+	/*if(numBytes > sizeof(buffer) ){
 		perror("El número de bytes que se desea leer excede el tamaño del buffer");
 		return -1;
-	}
+	}*/
 
 	//Creo un nuevo lector para grabar lo que obtengo de disco
 	char* lecturaBloques = malloc ( LIMITE_TAMANO );
@@ -434,8 +450,9 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
 {	
 	int punteroW = fileDescriptor[file_Descriptor].punteroRW;
 	short bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
+	
 	if(numBytes + punteroW > LIMITE_TAMANO){
-		numBytes = LIMITE_TAMANO - (numBytes + punteroW);
+		numBytes = LIMITE_TAMANO;
 	}
 
 	//LECTURA DEL CONTENIDO DEL DISCO QUE HAY QUE MODIFICAR
@@ -533,40 +550,33 @@ int lseekFile(int file_Descriptor, long offset, int whence)
 
 int checkFile (char * fileName)
 {
-	/*
-	if(checkTamanoNombre!=0){//comprobamos el nombre
+	if(checkTamanoNombre(fileName) != 0){//comprobamos el nombre
 		perror("El tamaño del nombre no es valido");
 		return -2;
 	}
-
-	if(existeFichero(fileName)==-1){//Comprobamos si existe el fichero
+	int inodo = existeFichero(fileName);
+	if(inodo == -1){//Comprobamos si existe el fichero
 		perror("El fichero no existe");
 		return -2;		
 	}
-
-	if(searchFD(fileName)!=1){//Si el archivo ya estaba abierto error
+	int fd = searchFD(fileName);
+	if(fd!= -1){//Si el archivo ya estaba abierto error
 		perror("El archivo estaba abierto");
 		return -2;
 	}
-	short fd=openFile(fileName);//Abrimos el archivo
-
-	if(tieneIntegridad(fd)!=0){//Comprobamos si tiene integridad
+	uint32_t crcActual = tieneIntegridad(inodo);
+	if(tieneIntegridad(inodo) == -1){//Comprobamos si tiene integridad
 		perror("El fichero no tiene integridad");
 		return -2;
 	}
-
-	char buffer[fileDescriptor[fd].punteroInodo[0].tamano];
-	readFile(fd, buffer, tamanoFichero);//Leemos el fichero
 	
-	uint32_t CRC = CRC32(buffer, strlen(buffer));//hacemos el CRC de los datos leidos  CAMBIAR EL TIPO DEL CRC EN EL INODO
+	uint32_t CRCnuevo = crearIntegridad(inodo);
 
-	if(CRC!=fileDescriptor[fd].punteroInodo[0].integridad){ //comparamos los CRC
+	if(CRCnuevo != crcActual){ //comparamos los CRC
 		perror("El archivo esta corrupto");
 		return -1;	
 	}
-
-	closeFile(fd);//Cerramos el archivo
-	*/
+	printf("%i, %i \n",CRCnuevo, crcActual);
     return 0;
 }
 
@@ -579,38 +589,30 @@ int checkFile (char * fileName)
 
 int includeIntegrity (char * fileName)
 {
-	/*
-    if(checkTamanoNombre!=0){//comprobamos el nombre
+    if(checkTamanoNombre(fileName) != 0){//comprobamos el nombre
 		perror("El tamaño del nombre no es valido");
 		return -2;
 	}
-
-	if(existeFichero(fileName)==-1){//Comprobamos si existe el fichero
+	int inodo = existeFichero(fileName);
+	if(inodo == -1){//Comprobamos si existe el fichero
 		perror("El fichero no existe");
-		return -1;		
+		return -2;		
 	}
-
-	if(searchFD(fileName)!=1){//Si el archivo ya estaba abierto error (¿TAMBIEN como en check?)
+	int fd = searchFD(fileName);
+	if(fd!= -1){//Si el archivo ya estaba abierto error
 		perror("El archivo estaba abierto");
 		return -2;
 	}
-
-	short fd=openFile(fileName);//Abrimos el archivo
-
-	if(tieneIntegridad(fd)==0){//Comprobamos si tiene integridad
-		perror("El fichero ya tiene integridad");
+	uint32_t crcActual = tieneIntegridad(inodo);
+	if(crcActual != -1){//Comprobamos si tiene integridad
+		perror("El fichero tiene integridad");
 		return -2;
 	}
-
-	char buffer[fileDescriptor[fd].punteroInodo[0].tamano];
-	readFile(fd, buffer, fileDescriptor[fd].punteroInodo[0].tamano);//Leemos el fichero
 	
-	uint32_t CRC = CRC32(buffer, strlen(buffer));//hacemos el CRC de los datos leidos
+	uint32_t CRC = crearIntegridad(inodo);
+	printf("%i\n",CRC);
+	inodos[inodo].integridad = CRC;//Establecemos el CRC creado
 
-	fileDescriptor[fd].punteroInodo[0].integridad=CRC;//Establecemos el CRC creado
-
-	closeFile(fd);
-	*/
 	return 0;
 }
 
@@ -622,21 +624,50 @@ int includeIntegrity (char * fileName)
  */
 int openFileIntegrity(char *fileName)///MIRAR ERRORES
 {	
-	/*
-	if(existeFichero(fileName)==-1){//Comprobamos si existe el fichero
+	//Compruebo el tamaño del nombre que me han pasado
+	if (checkTamanoNombre(fileName) != 0){
+		perror("El tamaño del nombre es incorrecto");
+		return -3;
+	} 
+	
+	//Compruebo la existencia del fichero, y guardo su identificador de nodo
+	short inodoFichero = existeFichero(fileName);
+	if (inodoFichero == -1) {
 		perror("El fichero no existe");
-		return -1;		
+		return -1;
+	}
+	
+	if( checkFile(fileName) == -1){
+		perror("Fichero corrupto");
+		return -2;
 	}
 
-	short fd=openFile(fileName);//Abrimos el archivo
-
-	if(checkFile(fileName)==-1){
-		perror("El fichero esta corrupto");
-		return -2;		
+	//Compruebo si ya existe en el sistema de filedescriptor
+	int fd = searchFD(fileName);
+	//Si ya existe, devuelvo el descritor donde está abierto
+	if(fd != -1) return fd;
+	
+	//Busco un fd vacio
+	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
+		if(strcmp(fileDescriptor[i].nombre, "") == 0){
+			fd = i;
+			break;
+		}
 	}
-	openFile(fileName);
-    */
-   return -1;
+	if(fd == -1){
+		perror("Máximo de archivos abiertos alcanzado");
+		return -3;
+	} 
+
+
+	//Hago todo lo necesario para abrir el fichero en memoria
+	memcpy(fileDescriptor[fd].nombre, fileName, strlen (fileName));
+	fileDescriptor[fd].abiertoConIntegridad = 1;
+	fileDescriptor[fd].punteroRW = 0;	
+	fileDescriptor[fd].punteroInodo = &inodos[inodoFichero];
+
+	return fd;
+
 }
 
 
@@ -647,32 +678,34 @@ int openFileIntegrity(char *fileName)///MIRAR ERRORES
  */
 int closeFileIntegrity(int file_Descriptor)
 {
-	/*
-	if( file_Descriptor < 0 || file_Descriptor>48){//COmprobamos el fd pasado
-		perror("El descriptor de fichero no existe");
-		return -1;
-	}
-	
-	if(searchFD(fileDescriptor[file_Descriptor].nombre)==-1){//Si el archivo no estaba abierto error
-		perror("El archivo no estaba abierto");
-		return -1;
-	}
-	
-	if(tieneIntegridad(file_Descriptor)!=0){//Comprobamos si tiene integridad
-		perror("El fichero no tiene integridad");
+	//Compruebo si el valor que me han pasado es correcto
+	if(file_Descriptor >48 || file_Descriptor<0){
+		perror("Descriptor de fichero invalido");
 		return -1;
 	}
 
-	char buffer[fileDescriptor[fd].punteroInodo[0].tamano];
-	readFile(fd, buffer, tamanoFichero);//Leemos el fichero
+	//Compruebo que el fichero está abierto
+	if(strcmp(fileDescriptor[file_Descriptor].nombre, "") == 0){
+		perror("No está abierto ese fichero");
+		return -1;
+	}
 	
-	uint32_t CRC = CRC32(buffer, strlen(buffer));//hacemos el CRC de los datos leidos
+	if(fileDescriptor[file_Descriptor].abiertoConIntegridad != 1){
+		perror("El archivo NO ha sido abierto con comprobación de integridad");
+		return -1;
+	}
+	int inodo = -1;
+	if ( (inodo = existeFichero(fileDescriptor[file_Descriptor].punteroInodo[0].nomFichero)) == -1){
+		perror("No existe el fichero");
+		return -1;
+	}
 
-	fileDescriptor[fd].punteroInodo[0].integridad=CRC;//Establecemos el CRC creado
-
-	closeFile(fd);
-	*/
-    return -1;
+	inodos[inodo].integridad = crearIntegridad(inodo);
+	//Formateo la estructura del descriptor de ficheros elegida.
+	memcpy(fileDescriptor[file_Descriptor].nombre, "", sizeof "");
+	fileDescriptor[file_Descriptor].punteroRW = 0;
+	fileDescriptor[file_Descriptor].punteroInodo = NULL;
+	return 0;
 }
 
 
@@ -706,7 +739,6 @@ int removeLn(char *linkName)
 int checkTamanoNombre(char* fileName){
 	int tamano = strlen(fileName) ;
 	if(tamano > 32 || tamano == 0){
-		perror("Tamaño del nombre de archivo incorrecto");
 		return -1;
 	}
 	return 0;
@@ -751,14 +783,39 @@ int searchFD(char* fileName){
  * Entrada: el CRC del fichero
  * Salida: 0 si tiene integridad o -1 si no 
 */
-int tieneIntegridad(short fd){
-	uint32_t integridad = fileDescriptor[fd].punteroInodo[3].integridad;
+uint32_t tieneIntegridad(short indice){
+	uint32_t integridad = inodos [indice].integridad;
 		if( integridad == 0){
-			perror("El archivo no tiene integridad");
 			return -1;
 		}
-		return 0;
+		return integridad;
 }
+
+
+uint32_t crearIntegridad(int inodo){
+	int bloquesLectura = ( (inodos[inodo].tamano) / BLOCK_SIZE) + 1;
+	char* buffer = malloc (bloquesLectura*BLOCK_SIZE);
+	int bloqueLeido ;
+	int puntero = 0;
+	for(int i = 0; i<bloquesLectura; i++){
+		bloqueLeido = inodos[inodo].referencia[i];
+		if (bread(DEVICE_IMAGE, bloqueLeido, buffer + puntero) != 0) return -1;
+		puntero = puntero + BLOCK_SIZE;
+	}
+	
+	unsigned int tamanoFichero = strlen(buffer);
+	unsigned char* buffer2 = malloc (tamanoFichero);
+	memcpy(buffer2, buffer, tamanoFichero);
+	uint32_t CRCnuevo = CRC32 ( buffer2, tamanoFichero);//hacemos el CRC de los datos leidos 
+
+/*	buffer2 = NULL;
+	buffer = NULL;
+	free(buffer2);
+	free(buffer);*/
+	return CRCnuevo;
+}
+
+
 
 /**
  * Crea un nuevo superbloque a partir de los parámetros dados y

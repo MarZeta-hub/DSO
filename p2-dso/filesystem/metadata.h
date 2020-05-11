@@ -49,6 +49,7 @@ uint32_t integridad; //CRC de integridad
 } TipoInodo;
 
 typedef struct {
+  int abiertoConIntegridad ;
 	char nombre [32]; //Nombre del fichero
   TipoInodo* punteroInodo;
   int punteroRW;    //puntero del archivo

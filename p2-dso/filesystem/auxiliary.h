@@ -50,7 +50,10 @@ int checkTamanoNombre(char* fileName);
 int searchFD(char* fileName);
 
 //Comprueba si un fichero tiene integridad
-int tieneIntegridad(short fd);
+uint32_t tieneIntegridad(short indice);
+
+//Creador de integridad
+uint32_t crearIntegridad(int inodo);
 
 //Se utiliza para sincronizar los cambios con el disco
 int syncDisk();
