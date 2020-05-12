@@ -37,7 +37,7 @@ create_disk: create_disk.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 test: $(LIBFS_NAME)
-	$(CC) $(CFLAGS) -o test mistest.c libfs.a
+	$(CC) $(CFLAGS) -o test test.c libfs.a
 
 $(LIBFS_NAME): $(LIBFS_OBJS)
 	$(AR) rcv $@ $^
