@@ -281,7 +281,10 @@ int createFile(char *fileName)
 int removeFile(char *fileName)
 {	
 	//Comprobar si el tamaño del nombre es correcto
-	if(checkTamanoNombre(fileName) != 0) return -2;
+	if(checkTamanoNombre(fileName) != 0){
+		perror("El tamaño del nombre no es correcto");
+		return -2;
+	} 
     //Busco donde está el fichero
 	short indiceFichero = existeFichero(fileName);
 	//Buscar el inodo con el nombre if si no existe return -1
@@ -293,7 +296,8 @@ int removeFile(char *fileName)
 	//Elimino el fd si tiene uno
 	int fd = searchFD(fileName);
 	if(fd !=-1){
-		closeFile(fd);
+		if(fileDescriptor[fd].abiertoConIntegridad == 0) closeFile(fd); //cerrarlo sin integridad
+		else closeFileIntegrity(fd); //Cerrado con integridad
 	}
 	
 	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
@@ -338,7 +342,10 @@ int openFile(char *fileName)
 	//Compruebo si ya existe en el sistema
 	int fd = searchFD(fileName);
 	//Si ya existe, devuelvo el descritor donde está abierto
-	if(fd != -1) return fd;
+	if(fd != -1){
+		perror("El fichero ya está abierto");
+		return -1;
+	}
 	
 	//Busco un fd vacio
 	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
@@ -642,9 +649,9 @@ int includeIntegrity (char * fileName)
 	int tamano = inodos[inodo].tamano;
 	unsigned short* referencia = inodos[inodo].referencia;
 	//Obtengo la nueva integridad del fichero
-	uint32_t CRC = crearIntegridad(tamano, referencia);
+	uint32_t CRCnuevo = crearIntegridad(tamano, referencia);
 	//Se la añado
-	inodos[inodo].integridad = CRC; //Establecemos el CRC creado
+	inodos[inodo].integridad = CRCnuevo; //Establecemos el CRC creado
 	return 0;
 }
 
@@ -684,7 +691,10 @@ int openFileIntegrity(char *fileName)///MIRAR ERRORES
 	//Compruebo si ya existe en el sistema de filedescriptor
 	int fd = searchFD(fileName);
 	//Si ya existe, devuelvo el descritor donde está abierto
-	if(fd != -1) return fd;
+	if(fd != -1) {
+		perror("El fichero ya está abierto");
+		return -3;
+	}
 	
 	//Busco un fd vacio
 	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
@@ -833,7 +843,11 @@ int createLn(char *fileName, char *linkName)
 int removeLn(char *linkName)
 {
 	//Comprobar si el tamaño del nombre es correcto
-	if(checkTamanoNombre(linkName) != 0) return -2;
+	if(checkTamanoNombre(linkName) != 0){
+		perror("El tamaño del fichero no es valido");
+		return -2;
+
+	}
     //Busco donde está el fichero
 	short indiceFichero = existeFichero(linkName);
 	//Buscar el inodo con el nombre if si no existe return -1
