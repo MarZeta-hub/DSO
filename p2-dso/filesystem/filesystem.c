@@ -152,17 +152,11 @@ int unmountFS(void)
 		perror("Error al sincronizar con el disco");
 		return -1;
 	} 
-	int fd = -1;
 	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
 		if(strcmp(fileDescriptor[i].nombre, "") == 0){
-			fd = i;
-			break;
+			if(fileDescriptor[i].abiertoConIntegridad == 0) closeFile(i); //cerrarlo sin integridad
+			else closeFileIntegrity(i); //Cerrado con integridad
 		}
-	}
-
-	if(fd == -1){
-		perror("No se puede desmontar el sistema, hay archivos abiertos");
-		return -1;
 	}
 
 	//Desmontamos los datos del disco en memoria
