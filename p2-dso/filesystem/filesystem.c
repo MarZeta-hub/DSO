@@ -136,7 +136,6 @@ int mountFS(void)
 		if( bread(DEVICE_IMAGE, sbloque[0].primerInodo + i, inodosContent) == -1) {return -1;} 
 		chartoInodo(inodosContent, i);	
 	}
-	printfSB();
 	return 0;
 }
 
@@ -470,20 +469,34 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
 	short bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1; // Obtengo la posición del bloque EOF
 	
 	if(numBytes + punteroW > LIMITE_TAMANO){
-		numBytes = LIMITE_TAMANO; //En el caso de que el numBytes que se quiera leer más la posición del archivo sea mas que el limite máximo
+		numBytes = LIMITE_TAMANO - 1; //En el caso de que el numBytes que se quiera leer más la posición del archivo sea mas que el limite máximo
 	}
 
 	//LECTURA DEL CONTENIDO DEL DISCO QUE HAY QUE MODIFICAR
 	int obtenerReferencia = punteroW / BLOCK_SIZE ;  //Obtengo la referencia desde donde se quiere escribir
+	int obtenerReferencia2 = obtenerReferencia;
 	int bloquesNecesarios = (numBytes / BLOCK_SIZE) + 1; // Obtengo los bloques necesarios que se quiere escribir
-	char* contenidoDisco = malloc (bloquesNecesarios * BLOCK_SIZE); // Creo un nuevo array de chars para almacenar los datos
-	if( readFile(file_Descriptor, contenidoDisco, bloquesNecesarios * BLOCK_SIZE) == -1) return -1; //leo el contenido si se quiere sobreescribir el archivo
+	char* contenidoDisco = malloc (bloquesNecesarios  * BLOCK_SIZE); // Creo un nuevo array de chars para almacenar los datos
+	short lugarBloque = -1; //Me proporciona el bloque que hay que modificar
+	short nuevoBloque = 0; //Es un indicador que me ofrece si sigue habiendo bloques del fichero o hay que buscar nuevos bloques de datos vacios
+	for(int i = 0; i< bloquesNecesarios; i++){
+		//Obtengo el bloque donde tengo que leer
+		lugarBloque = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia2];
+		if( lugarBloque == bloqueEOF )break;
+		//lo leo
+		if(bread(DEVICE_IMAGE, lugarBloque, contenidoDisco + nuevoBloque) != 0){
+			perror("Error al leer de disco");
+			return -1;
+		}
+		//el siguiente bloque
+		nuevoBloque = nuevoBloque + BLOCK_SIZE;
+	}
 	int punteroCD = punteroW - obtenerReferencia * BLOCK_SIZE; //Obtengo un nuevo puntero desde la refencia anterior
 	memcpy(contenidoDisco + punteroCD, buffer, numBytes); //Copio lo nuevo que quiero escribir sobreescribiendo lo anterior mediante el puntero
 	
 	//ESCRITURA DEL CONTENIDO ACTUALIZADO AL DISCO
-	short nuevoBloque = 0; //Es un indicador que me ofrece si sigue habiendo bloques del fichero o hay que buscar nuevos bloques de datos vacios
-	short lugarBloque = -1; //Me proporciona el bloque que hay que modificar
+	nuevoBloque = 0; //Es un indicador que me ofrece si sigue habiendo bloques del fichero o hay que buscar nuevos bloques de datos vacios
+	lugarBloque = -1; //Me proporciona el bloque que hay que modificar
 	int punteroEscritura = 0; //Me otorga la posición actual del array de chars de contenidoDisco
 
 	//Hasta que no se completen los bloques que quiero escribir
@@ -532,7 +545,7 @@ int writeFile(int file_Descriptor, void *buffer, int numBytes)
 */
 int lseekFile(int file_Descriptor, long offset, int whence)
 {
-	if(strcmp(fileDescriptor[file_Descriptor].nombre,"")==0 || file_Descriptor<0 || file_Descriptor>48){//COmprobamos el fd pasado
+	if(/*strcmp(fileDescriptor[file_Descriptor].nombre,"") == 0 ||*/ file_Descriptor<0 || file_Descriptor>48){//COmprobamos el fd pasado
 		perror("El descriptor de fichero no existe");
 		return -1;
 	}
@@ -548,7 +561,7 @@ int lseekFile(int file_Descriptor, long offset, int whence)
 		fileDescriptor[file_Descriptor].punteroRW = nuevaPosicion;
 		break;
 	case 1: //FS_SEEK _BEGIN DESDE EL INICIO
-		fileDescriptor[file_Descriptor].punteroRW=0;//actualizamos al principio del archivo el puntero
+		fileDescriptor[file_Descriptor].punteroRW = 0;//actualizamos al principio del archivo el puntero
 		break;
 	case 2: //FS_SEEK_END DESDE EL FINAL
 		fileDescriptor[file_Descriptor].punteroRW=fileDescriptor[file_Descriptor].punteroInodo[0].tamano;//actualizamos al final del archivo el puntero
@@ -558,6 +571,7 @@ int lseekFile(int file_Descriptor, long offset, int whence)
 		return -1;
 		break;
 	}
+	
 	return 0;
 
 }
