@@ -106,10 +106,11 @@ int main()
 
 
 	//Leer más número de bytes que el tamaño del fichero  MAAAAAAAAAL
-/*	char bufferTamano [20];
+	char bufferTamano [20];
 	createFile("pruebaTamaño2.txt");
 	openFile("pruebaTamaño2.txt");
 	writeFile(0, "HOLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", 53);
+	lseekFile(0,0,1);
 	ret=readFile(0,bufferTamano, 53);
 	printf("%i", ret);
 	if (ret == 0)
@@ -119,7 +120,7 @@ int main()
 	}
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST readEnUnBufferInsuficiente ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
 	removeFile("pruebaTamaño2.txt");
-*/
+
 
 
 
@@ -394,7 +395,7 @@ int main()
 */
 
 
-
+/*
 //Leer más número de bytes que el tamaño del fichero 
 	char* bufferTamanoMax = malloc (6);
 	createFile("pruebaTamano.txt");
@@ -411,7 +412,7 @@ int main()
 	fprintf(stdout, "%s%s%s%s%s", ANSI_COLOR_BLUE, "TEST readMasBytesDelContenidoDelArchivo ", ANSI_COLOR_GREEN, "SUCCESS\n", ANSI_COLOR_RESET);
 	removeFile("pruebaTamano.txt");
 
-
+*/
 
 
 	//Crear un enlace a otro enlace símbolico

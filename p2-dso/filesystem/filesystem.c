@@ -440,8 +440,7 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 	}
 	//En el caso de que el numero de bytes leidos sea menor que el que me piden
 	
-	lecturaBloques = lecturaBloques + punteroR;	
-	printf(" hey que pasa maquina %s, %li\n", lecturaBloques, strlen(lecturaBloques));
+	lecturaBloques = lecturaBloques + punteroR;	//Pongo el puntero en el buffer
 	if(numBytes < numBytesLeidos){ //En el caso de que lea más bytes de lo que me piden
 		memcpy(buffer, lecturaBloques, numBytes); //paso los datos de un buffer a otro
 		numBytesLeidos = numBytes; //actualizo el return de bytes
