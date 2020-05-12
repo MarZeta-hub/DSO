@@ -129,7 +129,6 @@ int mountFS(void)
 	//Copio los datos obtenidos
 	memcpy(b_map, mapAux, sbloque[0].numBloquesInodos);
 
-
 	//INODOS
 	char inodosContent[BLOCK_SIZE];
 	inodos = malloc((sizeof inodos[0]) * sbloque[0].numBloquesInodos);
@@ -169,9 +168,13 @@ int unmountFS(void)
 
 	//Desmontamos los datos del disco en memoria
   	free(inodos);
+	inodos = NULL;
 	free (sbloque);
+	sbloque = NULL;
 	free (i_map);
+	i_map = NULL;
     free (b_map);
+	b_map = NULL;
 	return 0;
 
 }
@@ -234,8 +237,12 @@ int createFile(char *fileName)
 		return -2;
 	}
 	//Compruebo si el tamaño del nombre es correcto
-	if (checkTamanoNombre( fileName) == -1) return -2;
+	if (checkTamanoNombre( fileName) == -1){
+		perror("El tamaño del nombre es incorrecto");
+		return -2;
+	} 
 	//Compruebo si el nombre del archivo existe en el sistema
+
 	//devuelve el nodo si existe el fichero, si no devuelve -1
 	if (existeFichero(fileName) != -1){
 		perror("El nombre de archivo ya existe");
@@ -284,8 +291,9 @@ int removeFile(char *fileName)
 	}
 
 	//Elimino el fd si tiene uno
-	if(searchFD(fileName)!=-1){
-		closeFile(searchFD(fileName));
+	int fd = searchFD(fileName);
+	if(fd !=-1){
+		closeFile(fd);
 	}
 	
 	int bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
@@ -398,10 +406,6 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 		perror("Error, el tamaño más la posición actual del puntero es mayor que el tamaño máximo de archivo");
 		return -1;
 	}
-	/*if(numBytes > sizeof(buffer) ){
-		perror("El número de bytes que se desea leer excede el tamaño del buffer");
-		return -1;
-	}*/
 
 	//Creo un nuevo lector para grabar lo que obtengo de disco
 	char* lecturaBloques = malloc ( LIMITE_TAMANO );
@@ -442,71 +446,77 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 
 
 
-/*
- * @brief	Writes a number of bytes from a buffer and into a file.
- * @return	Number of bytes properly written, -1 in case of error.
- */
+/**
+ * Escribe el contenido de un array de chars en disco
+ * Entrada: descriptor de archivos, el buffer y el numBytes
+ * Salida: el número de bytes escritos si es correcto, -1 si es incorrecto 
+*/
 int writeFile(int file_Descriptor, void *buffer, int numBytes)
 {	
-	int punteroW = fileDescriptor[file_Descriptor].punteroRW;
-	short bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1 ;
+	int punteroW = fileDescriptor[file_Descriptor].punteroRW; // Obtengo el puntero donde está el archivo
+	short bloqueEOF = sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1; // Obtengo la posición del bloque EOF
 	
 	if(numBytes + punteroW > LIMITE_TAMANO){
-		numBytes = LIMITE_TAMANO;
+		numBytes = LIMITE_TAMANO; //En el caso de que el numBytes que se quiera leer más la posición del archivo sea mas que el limite máximo
 	}
 
 	//LECTURA DEL CONTENIDO DEL DISCO QUE HAY QUE MODIFICAR
-	int obtenerReferencia = punteroW / BLOCK_SIZE ; 
-	int bloquesNecesarios = (numBytes / BLOCK_SIZE) + 1;
-	char* contenidoDisco = malloc (bloquesNecesarios * BLOCK_SIZE);
-	//if( readFile(file_Descriptor, contenidoDisco, bloquesNecesarios * BLOCK_SIZE) == -1) return -1;
-	int punteroCD = punteroW - obtenerReferencia * BLOCK_SIZE;
-	memcpy(contenidoDisco + punteroCD, buffer, numBytes);
+	int obtenerReferencia = punteroW / BLOCK_SIZE ;  //Obtengo la referencia desde donde se quiere escribir
+	int bloquesNecesarios = (numBytes / BLOCK_SIZE) + 1; // Obtengo los bloques necesarios que se quiere escribir
+	char* contenidoDisco = malloc (bloquesNecesarios * BLOCK_SIZE); // Creo un nuevo array de chars para almacenar los datos
+	if( readFile(file_Descriptor, contenidoDisco, bloquesNecesarios * BLOCK_SIZE) == -1) return -1; //leo el contenido si se quiere sobreescribir el archivo
+	int punteroCD = punteroW - obtenerReferencia * BLOCK_SIZE; //Obtengo un nuevo puntero desde la refencia anterior
+	memcpy(contenidoDisco + punteroCD, buffer, numBytes); //Copio lo nuevo que quiero escribir sobreescribiendo lo anterior mediante el puntero
 	
 	//ESCRITURA DEL CONTENIDO ACTUALIZADO AL DISCO
-	short nuevoBloque = 0;
-	short lugarBloque = -1;
-	int punteroEscritura = 0;
+	short nuevoBloque = 0; //Es un indicador que me ofrece si sigue habiendo bloques del fichero o hay que buscar nuevos bloques de datos vacios
+	short lugarBloque = -1; //Me proporciona el bloque que hay que modificar
+	int punteroEscritura = 0; //Me otorga la posición actual del array de chars de contenidoDisco
 
+	//Hasta que no se completen los bloques que quiero escribir
 	for(int bloqueActual = 0; bloqueActual < bloquesNecesarios; bloqueActual++){
-		obtenerReferencia = obtenerReferencia + bloqueActual;
-		if(nuevoBloque == 0) lugarBloque = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia];
-		if(lugarBloque == bloqueEOF) nuevoBloque = 1;
-		if(nuevoBloque == 1){
-			for(int i = 0; i < sbloque[0].numBloquesDatos; i++){
-				if( bitmap_getbit(b_map, i) == 0){
-					lugarBloque = i + sbloque[0].primerBloqueDatos ;
-					fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia] = lugarBloque;
-					bitmap_setbit(b_map, i, 1);
-					break;
+		obtenerReferencia = obtenerReferencia + bloqueActual; //El indice de refencias del archivo
+		if(nuevoBloque == 0) lugarBloque = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia]; // Si existe esa referencia en el inodo
+		if(lugarBloque == bloqueEOF) nuevoBloque = 1; //En caso de que no, se activa el flag de que debemos buscar a partir de ahora bloques de datos nuevos
+		if(nuevoBloque == 1){ //Para buscar un bloque de datos nuevo
+			for(int i = 0; i < sbloque[0].numBloquesDatos; i++){ // Busco entre todos los bloques de datos del sistema
+				if( bitmap_getbit(b_map, i) == 0){ //En el caso de que en el mapa de datos no esté usado el bloque
+					lugarBloque = i + sbloque[0].primerBloqueDatos ; //Lo añado al Lugar bloque
+					fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia] = lugarBloque; //Lo añado a las referencias del inodo
+					bitmap_setbit(b_map, i, 1); //Selecciono como que ese bloque ha sido ya utilizado
+					break; //Rompo el for
 				}
 			}
 		}
+		//Escribo en disco en el lugar de bloque proporcionado y el contenido que se quiere agregar
 		if( bwrite(DEVICE_IMAGE, lugarBloque, contenidoDisco + punteroEscritura) != 0){
 			perror("Error al escribir en el archivo");
 			return -1;
 		}
-		punteroEscritura = punteroEscritura + BLOCK_SIZE;
+		punteroEscritura = punteroEscritura + BLOCK_SIZE; //Actualizo el puntero de escritura
 	}
-
-	punteroW = punteroW + numBytes;
-	fileDescriptor[file_Descriptor].punteroRW = punteroW;
-	int tamanoFichero = fileDescriptor[file_Descriptor].punteroInodo[0].tamano;
+	punteroW = punteroW + numBytes; //Actualizo el puntero del descriptor de archivos
+	fileDescriptor[file_Descriptor].punteroRW = punteroW; //Actualizao el puntero del descriptor de archivos
+	int tamanoFichero = fileDescriptor[file_Descriptor].punteroInodo[0].tamano; //Obtengo el tamaño del fichero
 	contenidoDisco = NULL;
-	free(contenidoDisco);
-	if(punteroW > tamanoFichero){
-		fileDescriptor[file_Descriptor].punteroInodo[0].tamano = punteroW;
-		fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia + 1] = bloqueEOF;
+	free(contenidoDisco); //Libero el malloc realizado anteriormente
+	if(punteroW > tamanoFichero){ //Si el puntero otorgado es mayor que el tamaño dle fichero, significa que he añadido más contenido
+		fileDescriptor[file_Descriptor].punteroInodo[0].tamano = punteroW; //Entonces cambio el tamaño
+		fileDescriptor[file_Descriptor].punteroInodo[0].referencia[obtenerReferencia + 1] = bloqueEOF; //Y añado el bloque eof al final de los bloques de referencia
 	}
-	return numBytes;
+	return numBytes; //Devuelvo el número de bytes escritos
 }
 
 
 
-/*
- * @brief	Modifies the position of the seek pointer of a file.
- * @return	0 if succes, -1 otherwise.
- */
+/**
+ * Establece el puntero de lectura a una posición dicha por el usuario
+ * Entrada: el descriptor de fichero, la posición de desplazamiento y desde donde
+ * Whence = 0: EL puntero se queda donde está. Solo funciona el offset en este caso
+ * Whence = 1: EL documento se establece desde el inicio
+ * Whence = 2: El docuemento se establece desde el final
+ * 
+*/
 int lseekFile(int file_Descriptor, long offset, int whence)
 {
 	if(strcmp(fileDescriptor[file_Descriptor].nombre,"")==0 || file_Descriptor<0 || file_Descriptor>48){//COmprobamos el fd pasado
@@ -519,17 +529,15 @@ int lseekFile(int file_Descriptor, long offset, int whence)
 	case 0: //FS_SEEK_CUR  DESDE LA POSICION ACTUAL
 		 nuevaPosicion = fileDescriptor[file_Descriptor].punteroRW + offset;
 		if(nuevaPosicion<0 || nuevaPosicion > fileDescriptor[file_Descriptor].punteroInodo[0].tamano){//Comprobamos que la nueva posicion del puntero no exceda los limites del fichero
-			perror("El offset introucido excede los limites del fichero");
+			perror("El offset introducido excede los limites del fichero");
 			return -1;
 		}
 		fileDescriptor[file_Descriptor].punteroRW = nuevaPosicion;
 		break;
 	case 1: //FS_SEEK _BEGIN DESDE EL INICIO
-
 		fileDescriptor[file_Descriptor].punteroRW=0;//actualizamos al principio del archivo el puntero
 		break;
 	case 2: //FS_SEEK_END DESDE EL FINAL
-		
 		fileDescriptor[file_Descriptor].punteroRW=fileDescriptor[file_Descriptor].punteroInodo[0].tamano;//actualizamos al final del archivo el puntero
 		break;	
 	default:
@@ -543,103 +551,134 @@ int lseekFile(int file_Descriptor, long offset, int whence)
 
 
 
-/*
- * @brief	Checks the integrity of the file.
- * @return	0 if success, -1 if the file is corrupted, -2 in case of error.
- */
-
+/**
+ * Verifica la integridad de un fichero mediante el valor que está
+ * en el inodo y mediante una nueva obtención de integridad
+ * Entrada: el nombre del archivo
+ * Salida: 0 si es correcto, -1 si está corrupto y -2 otros errores
+*/
 int checkFile (char * fileName)
 {
+	//Compruebo el tamaño del nombre otorgado
 	if(checkTamanoNombre(fileName) != 0){//comprobamos el nombre
 		perror("El tamaño del nombre no es valido");
-		return -2;
+		return -2; //Otros errores
 	}
+	//Compruebo si el fichero existe y almaceno el indice del inodo
 	int inodo = existeFichero(fileName);
 	if(inodo == -1){//Comprobamos si existe el fichero
 		perror("El fichero no existe");
-		return -2;		
+		return -2; //Otros errores
 	}
+	//Busco si existe un descriptor de ficheros ya que no puede
+	//Hacerse una revisión de integridad con un fichero siendo
+	//Manipulado
 	int fd = searchFD(fileName);
 	if(fd!= -1){//Si el archivo ya estaba abierto error
 		perror("El archivo estaba abierto");
-		return -2;
+		return -2; //Otros errores
 	}
+	//Obtengo el CRC actual que tiene el fichero, además
+	//De que compruebo si lo tiene
 	uint32_t crcActual = tieneIntegridad(inodo);
-	if(tieneIntegridad(inodo) == -1){//Comprobamos si tiene integridad
+	if(crcActual == -1){//Comprobamos si tiene integridad
 		perror("El fichero no tiene integridad");
-		return -2;
+		return -2; //Otros errores
 	}
-	
-	uint32_t CRCnuevo = crearIntegridad(inodo);
+	//Obtengo las variables necesarias para hacer la integridad 
+	//para comprobar si las dos integridades, tanto la que realmente
+	//tiene el fichero y la que nos dice que es son correctas
+	int tamano = inodos[inodo].tamano;
+	unsigned short* referencia = inodos[inodo].referencia;
+	uint32_t CRCnuevo = crearIntegridad(tamano, referencia);
 
+	//Compruebo si las dos integridades son inguales
 	if(CRCnuevo != crcActual){ //comparamos los CRC
 		perror("El archivo esta corrupto");
-		return -1;	
+		return -1; //Otros errores	
 	}
-	printf("%i, %i \n",CRCnuevo, crcActual);
     return 0;
 }
 
 
 
-/*
- * @brief	Include integrity on a file.
- * @return	0 if success, -1 if the file does not exists, -2 in case of error.
- */
 
+/**
+ * Le almacena una integridad a un fichero sin ella
+ * Entrada: el nombre del fichero
+ * Salida: o si es correcto, -1 si el fichero no existe y -2 por otros motivos
+*/
 int includeIntegrity (char * fileName)
 {
+	//Verifico el tamaño del fichero otorgado
     if(checkTamanoNombre(fileName) != 0){//comprobamos el nombre
 		perror("El tamaño del nombre no es valido");
-		return -2;
+		return -2; //Otros errores
 	}
+	//Verifico la existencia del fichero en el sistema
 	int inodo = existeFichero(fileName);
 	if(inodo == -1){//Comprobamos si existe el fichero
 		perror("El fichero no existe");
-		return -2;		
+		return -1;	//El fichero no existe
 	}
+
+	/* Creemos que un fichero no puede modificar su integridad
+	   cuando está abierto porque no es óptimo porqué si está 
+	   abierto se puede modificar*/
 	int fd = searchFD(fileName);
 	if(fd!= -1){//Si el archivo ya estaba abierto error
 		perror("El archivo estaba abierto");
-		return -2;
+		return -2; //Otros errores
 	}
+
+	//Busco si el fichero ya tenía integridad anteriormente
 	uint32_t crcActual = tieneIntegridad(inodo);
 	if(crcActual != -1){//Comprobamos si tiene integridad
 		perror("El fichero tiene integridad");
-		return -2;
+		return -2; //Otros errores
 	}
 	
-	uint32_t CRC = crearIntegridad(inodo);
-	printf("%i\n",CRC);
-	inodos[inodo].integridad = CRC;//Establecemos el CRC creado
-
+	//Los parámetros para poder crear una nueva integridad
+	int tamano = inodos[inodo].tamano;
+	unsigned short* referencia = inodos[inodo].referencia;
+	//Obtengo la nueva integridad del fichero
+	uint32_t CRC = crearIntegridad(tamano, referencia);
+	//Se la añado
+	inodos[inodo].integridad = CRC; //Establecemos el CRC creado
 	return 0;
 }
 
 
 
-/*
- * @brief	Opens an existing file and checks its integrity
- * @return	The file descriptor if possible, -1 if file does not exist, -2 if the file is corrupted, -3 in case of error
- */
+/**
+ * Abre un archivo con verificación de integridad, si el archivo
+ * no posee integridad o está corrupto no se abre
+ * Entrada: el nombre del archivo
+ * Salida: 0 si es correcto, -1 si no existe, -2 si está corrupto
+ * -3 otros errores
+*/
 int openFileIntegrity(char *fileName)///MIRAR ERRORES
 {	
-	//Compruebo el tamaño del nombre que me han pasado
-	if (checkTamanoNombre(fileName) != 0){
-		perror("El tamaño del nombre es incorrecto");
-		return -3;
-	} 
-	
-	//Compruebo la existencia del fichero, y guardo su identificador de nodo
-	short inodoFichero = existeFichero(fileName);
-	if (inodoFichero == -1) {
-		perror("El fichero no existe");
-		return -1;
+	//Compruebo el tamaño del nombre de ficheor dado
+	if(checkTamanoNombre(fileName) != 0){//comprobamos el nombre
+		perror("El tamaño del nombre no es valido");
+		return -3; //Otros problemas
 	}
-	
-	if( checkFile(fileName) == -1){
+	//Compruebo si existe el nodo
+	int inodo = existeFichero(fileName);
+	if(inodo == -1){//Comprobamos si existe el fichero
+		perror("El fichero no existe");
+		return -1;	//No existe en el sistema	
+	}
+
+	int verificacionFichero = checkFile(fileName);
+	if( verificacionFichero == -1){
 		perror("Fichero corrupto");
-		return -2;
+		return -2; //El fichero está corrupto
+	}
+	if(verificacionFichero == -2){
+		perror("No contiene integridad ");
+		return -3;
 	}
 
 	//Compruebo si ya existe en el sistema de filedescriptor
@@ -654,6 +693,7 @@ int openFileIntegrity(char *fileName)///MIRAR ERRORES
 			break;
 		}
 	}
+	//En el caso de que no existan descriptores deficheros libres
 	if(fd == -1){
 		perror("Máximo de archivos abiertos alcanzado");
 		return -3;
@@ -662,9 +702,11 @@ int openFileIntegrity(char *fileName)///MIRAR ERRORES
 
 	//Hago todo lo necesario para abrir el fichero en memoria
 	memcpy(fileDescriptor[fd].nombre, fileName, strlen (fileName));
+	//Se activa el open con integridad
 	fileDescriptor[fd].abiertoConIntegridad = 1;
+	//se modifica el puntero de posición
 	fileDescriptor[fd].punteroRW = 0;	
-	fileDescriptor[fd].punteroInodo = &inodos[inodoFichero];
+	fileDescriptor[fd].punteroInodo = &inodos[inodo];
 
 	return fd;
 
@@ -672,10 +714,11 @@ int openFileIntegrity(char *fileName)///MIRAR ERRORES
 
 
 
-/*
- * @brief	Closes a file and updates its integrity.
- * @return	0 if success, -1 otherwise.
- */
+/**
+ * Cierra un descriptor de fichero con actualización de integridad
+ * Entrada: el descriptor de fichero
+ * Salida: 0 si es correcto, -1 en caso de error
+*/
 int closeFileIntegrity(int file_Descriptor)
 {
 	//Compruebo si el valor que me han pasado es correcto
@@ -690,49 +733,64 @@ int closeFileIntegrity(int file_Descriptor)
 		return -1;
 	}
 	
+	//Compruebo si el fichero fue abierto con la opción de abrir 
+	//fichero con integridad
 	if(fileDescriptor[file_Descriptor].abiertoConIntegridad != 1){
 		perror("El archivo NO ha sido abierto con comprobación de integridad");
 		return -1;
 	}
-	int inodo = -1;
-	if ( (inodo = existeFichero(fileDescriptor[file_Descriptor].punteroInodo[0].nomFichero)) == -1){
-		perror("No existe el fichero");
-		return -1;
-	}
 
-	inodos[inodo].integridad = crearIntegridad(inodo);
+	//Obtengo el tamaño y las referencias de los bloques de datos 
+	//Del descriptor de ficheros
+	int tamano = fileDescriptor[file_Descriptor].punteroInodo[0].tamano;
+	unsigned short* referencia = fileDescriptor[file_Descriptor].punteroInodo[0].referencia;
+
+	//Obtengo el nuevo valor de integridad del fichero
+	fileDescriptor[file_Descriptor].punteroInodo[0].integridad = crearIntegridad(tamano, referencia);
 	//Formateo la estructura del descriptor de ficheros elegida.
 	memcpy(fileDescriptor[file_Descriptor].nombre, "", sizeof "");
+	//apunto su puntero a cero
 	fileDescriptor[file_Descriptor].punteroRW = 0;
+	//Apuntos u puntero del inodo a null
 	fileDescriptor[file_Descriptor].punteroInodo = NULL;
+	fileDescriptor[file_Descriptor].abiertoConIntegridad = 0;
 	return 0;
 }
 
 
-/*
- * @brief	Creates a symbolic link to an existing file in the file system.
- * @return	0 if success, -1 if file does not exist, -2 in case of error.
- */
+/**
+ * El método crea un enlace blando hacia un archivo 
+ * específico. El enlace blando es un fichero que solo
+ * contiene inodo, que referencia mediante puntero hacia los 
+ * datos del archivo dado. De por si mismo, solo tiene el nombre
+ * Entrada: el nombre del archivo del enlace blanco y el 
+ * nombre del archivo al que se quiere enlazar
+ * Salida: 0 si es correcto, -1 si el archivo al que se quiere
+ * enlazar no existe y -2 para otros errores
+*/
 int createLn(char *fileName, char *linkName)
 {
+	//Compruebo si el nombre del enlace es correcto
 	if( checkTamanoNombre(linkName) != 0 ){
 		perror("El nombre del link es erroneo"); 
 		return -2;
 	}
 
+	//Compruebo que el nombre del fichero es correcto
 	if(checkTamanoNombre(fileName) != 0){
 		perror("El nombre del link es erroneo"); 
 		return -2;
 	}
 
+	//Busco si existe el fichero en el sistema
 	int inodoFichero = existeFichero(fileName);
-
 	if(inodoFichero == -1){
 		perror("No existe el archivo");
 		return -1;
 	}
 	
-	//Busco un inodo que este libre
+	//Busco un inodo que este libre para que sea el
+	//del enlace blando
 	int inodo_libre=-1;
 	for(int i=0; i<sbloque[0].numBloquesInodos; i++){
 		if(bitmap_getbit(i_map,i) ==0){
@@ -740,27 +798,37 @@ int createLn(char *fileName, char *linkName)
 			break;
 		}
 	}
-
 	//En el caso de que no exista un inodo libre
 	if(inodo_libre == -1){
 		perror("No hay i-nodos libres");
 		return -2;
 	}
 
-	//CREAR EL INODO
+	//CREAR EL INODO nuevo para el enlace:
 	bitmap_setbit(i_map, inodo_libre, 1); //Ocupo en el mapa de bits el nuevo bloque
+	//El nodo libre va a ser un puntero del enlace duro
 	inodos[inodo_libre] = inodos[inodoFichero];
-	memset(inodos[inodo_libre].nomFichero, '\0', sizeof inodos[inodo_libre].nomFichero);;
+	//Elimino el nombre del fichero
+	memset(inodos[inodo_libre].nomFichero, '\0', sizeof inodos[inodo_libre].nomFichero);
+	//Le añado el nuevo nombre
 	memcpy(inodos[inodo_libre].nomFichero, linkName, strlen(linkName)); //le añado el nuevo nombre
+	//Actualizo en el superbloque el nuevo fichero
 	sbloque[0].numFicheros = sbloque[0].numFicheros + 1;
     return 0;
 }
 
 
 
-/*
- * @brief 	Deletes an existing symbolic link
- * @return 	0 if the file is correct, -1 if the symbolic link does not exist, -2 in case of error.
+/**
+ * Elimina un enlace blando sin eliminar el archivo original
+ * En el caso de que se elimine un enlace blando por le método
+ * de removeFile, se eliminará todas las refencias hacia los 
+ * bloques de datos, por lo que se quedará el inodo del archivo 
+ * inservible, ya que el enlace blando es contiene punteros hacia
+ * los inodos de los archivos.
+ * Entrada: el nombre del enlace blando
+ * Salida: 0 si funciona correctamente, -1 si no se encuentra el archivo 
+ * en el sistema y -2 otros errores
  */
 int removeLn(char *linkName)
 {
@@ -774,18 +842,25 @@ int removeLn(char *linkName)
 		return -1;
 	}
 
-	//Elimino el fd si tiene uno
+	//Elimino el fd si tiene uno para no dejar el archivo abierto
 	int fd = searchFD(linkName);
 	if(fd != -1){
 		closeFile(fd);
 	}
 
 	//Formateo el nodo
+	//Formateo el nombre con carácteres de final de array
 	memset(inodos[indiceFichero].nomFichero, '\0', sizeof inodos[indiceFichero].nomFichero);
+	//Recalculo el número de ficheros en el sistema, porque
+	//un enlace blando se cuenta como un archivo
 	sbloque[0].numFicheros = sbloque[0].numFicheros - 1;
+	//Establezco en el mapa que el inodo está libre
 	bitmap_setbit(i_map, indiceFichero,0);
     return 0;
 }
+
+
+////////////////////////NUESTROS METODOS NUEVOS/////////////////////////////////
 
 
 
@@ -795,11 +870,12 @@ int removeLn(char *linkName)
  * Salida: 0 si es correcto, -1 si es incorrecta
 */
 int checkTamanoNombre(char* fileName){
+	//Compruebo si el tamaño del nombre otorgado es correcto
 	int tamano = strlen(fileName) ;
-	if(tamano > 32 || tamano == 0){
-		return -1;
+	if(tamano > 32 || tamano == 0){ //Si cumple alguna de estas condiciones
+		return -1; //El nombre del fichero es incorrecto
 	}
-	return 0;
+	return 0; //Devuelvo 0 si es correcto
 }
 
 
@@ -810,6 +886,7 @@ int checkTamanoNombre(char* fileName){
  * Salida: -1 si no se encuentra y el nodo si ya existe
 */
 int existeFichero(char* fileName){
+	//Busco entre todos los inodos la existencia del fichero
 	for(int i = 0; i< sbloque[0].numBloquesInodos; i++){
 		if(strcmp(inodos[i].nomFichero, fileName) == 0 ){
 			return i; //te devuelvo el nodo donde está el fichero
@@ -828,12 +905,13 @@ int existeFichero(char* fileName){
  * Salida: el descriptor de fichero o -1 si no se encuentra
 */
 int searchFD(char* fileName){
+	//Busco en la estructura de descriptores de ficheros si el nombre dado está abierto
 	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
-		if(strcmp(fileDescriptor[i].nombre, fileName)== 0){
-			return i;
+		if(strcmp(fileDescriptor[i].nombre, fileName)== 0){ //Si son iguales
+			return i; //Devuelvo el FD 
 		}
 	}
-	return -1;
+	return -1; // EN el caso de que no exista
 }
 
 /**
@@ -842,35 +920,41 @@ int searchFD(char* fileName){
  * Salida: 0 si tiene integridad o -1 si no 
 */
 uint32_t tieneIntegridad(short indice){
+	//Busco la integridad en el inodo
 	uint32_t integridad = inodos [indice].integridad;
 		if( integridad == 0){
-			return -1;
+			return -1; //En el caso de que no existe la integridad
 		}
-		return integridad;
+	return integridad; //Devuelvo la integridad si existe
 }
 
 
-uint32_t crearIntegridad(int inodo){
-	int bloquesLectura = ( (inodos[inodo].tamano) / BLOCK_SIZE) + 1;
-	char* buffer = malloc (bloquesLectura*BLOCK_SIZE);
-	int bloqueLeido ;
-	int puntero = 0;
+/**
+ * El método crea una integridad para el inodo elegido
+ * Entrada: el índice del inodo en el mapa de inodos
+ * Salida: el CRC obtenido por el archivo
+*/
+uint32_t crearIntegridad(int tamano, unsigned short* referencia){
+	int bloquesLectura = ( (tamano) / BLOCK_SIZE) + 1; // Obtengo los bloques totales del archivo
+	char* buffer = malloc (bloquesLectura*BLOCK_SIZE); //Obtengo el buffer donde voy a leer el archivo
+	int bloqueLeido ; //El bloque donde hay que leer
+	int puntero = 0; //El puntero para agregar datos a disco
 	for(int i = 0; i<bloquesLectura; i++){
-		bloqueLeido = inodos[inodo].referencia[i];
+		bloqueLeido = referencia[i]; //obtengo el bloque dondo hay que leer
 		if (bread(DEVICE_IMAGE, bloqueLeido, buffer + puntero) != 0) return -1;
-		puntero = puntero + BLOCK_SIZE;
+		puntero = puntero + BLOCK_SIZE; //Actualizo el puntero
 	}
-	
-	unsigned int tamanoFichero = strlen(buffer);
-	unsigned char* buffer2 = malloc (tamanoFichero);
-	memcpy(buffer2, buffer, tamanoFichero);
+	unsigned int tamanoFichero = strlen(buffer); //Obtengo el tamaño del archivo
+	unsigned char* buffer2 = malloc (tamanoFichero); //para que el CRC2 pueda realizar sus acciones
+	memcpy(buffer2, buffer, tamanoFichero); //copio el contenido del buffer otorgado al buffer2
 	uint32_t CRCnuevo = CRC32 ( buffer2, tamanoFichero);//hacemos el CRC de los datos leidos 
 
-/*	buffer2 = NULL;
+	//Libero la memoria utilizada
+	buffer2 = NULL;
 	buffer = NULL;
 	free(buffer2);
-	free(buffer);*/
-	return CRCnuevo;
+	free(buffer);
+	return CRCnuevo; //Devuelvo el nuevo CRC
 }
 
 
@@ -884,7 +968,7 @@ uint32_t crearIntegridad(int inodo){
 void createSuperBloque(int tamanoDisco, char* contenidoSB){ 
 	//Obtener el número de bloques TipoSuperbloque super
 	int numBloques = tamanoDisco/BLOCK_SIZE; //para obtener el número de bloques
-	sbloque[0].numMagico = 100383266; 
+	sbloque[0].numMagico = 100383266;  //Identificador del disco
 	sbloque[0].primerInodo = 3;	//El primer bloque de inodos SuperBloque 0, Mapa 1 y mapa 2
 	sbloque[0].numBloquesMapaInodos = BLOCKS_MAP_INODO; //el mapa de nodos para conocer si está libre o no el nodo
 	sbloque[0].numBloquesInodos =  48; //El número de bloques de inodos solo puede haber hasta 48 inodos
@@ -977,10 +1061,10 @@ void chartoSB(char* contenidoSB){
  * Salida: nada
 */
 void inodoVacio(short indice){
-	memset(inodos[indice].nomFichero, '\0', sizeof inodos[indice].nomFichero);
-	inodos[indice].referencia[0] =  sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1;
-	inodos[indice].tamano = 0;
-	inodos[indice].integridad= 0;
+	memset(inodos[indice].nomFichero, '\0', sizeof inodos[indice].nomFichero); //Lleno de carácteres nulos el nombre del fichero
+	inodos[indice].referencia[0] =  sbloque[0].numBloquesInodos + sbloque[0].numBloquesDatos + sbloque[0].primerInodo -1;  //Añado EOF a la referencia 0
+	inodos[indice].tamano = 0; //Cambio el tamaño
+	inodos[indice].integridad= 0; //Cambio la integridad
 }
 
 
@@ -992,13 +1076,16 @@ void inodoVacio(short indice){
 */
 void inodotoChar(char* contenidoInodo, int indice){
 	short auxiliar = 0;
-	//Primer bloque donde se encuentra los bloques de Inodos
+	//Copio el nombre
 	memcpy( contenidoInodo, inodos[indice].nomFichero, sizeof inodos[indice].nomFichero);
 	auxiliar = sizeof inodos[indice].nomFichero; //Actualizo el valor de auxiliar
+	//Copio las referencias
 	memcpy( contenidoInodo + auxiliar, inodos[indice].referencia, sizeof inodos[indice].referencia);
 	auxiliar= sizeof inodos[indice].referencia + auxiliar; //Actualizo el valor de auxiliar
+	//Copio el tamaño
 	memcpy( contenidoInodo + auxiliar, &inodos[indice].tamano, sizeof inodos[indice].tamano);
 	auxiliar= sizeof inodos[indice].tamano+ auxiliar; //Actualizo el valor de auxiliar
+	//Copio la integridad
 	memcpy( contenidoInodo + auxiliar, &inodos[indice].integridad, sizeof inodos[indice].integridad);
 }
 
@@ -1040,7 +1127,7 @@ void printfSB(){
 
 
 /**
- * Imprime en pantalla los atributos de una estructura de inodos
+ * Imprime en pantalla los atributos de todos los inodos
  * Entrada: el bloque de se desea imprimir
  * Salida: nada
 */
@@ -1068,7 +1155,7 @@ void printfFD(){
 
 /**
  * Escribe en panalla un mapa otorgado
- * Entrada: el mapa a leer
+ * Entrada: el mapa a leer, 1 mapa de inodos, 2 mapa de datos
  * Salida: nada
 */
 void printfMapa(int mapa){

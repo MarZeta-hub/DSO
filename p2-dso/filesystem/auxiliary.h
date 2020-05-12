@@ -53,7 +53,7 @@ int searchFD(char* fileName);
 uint32_t tieneIntegridad(short indice);
 
 //Creador de integridad
-uint32_t crearIntegridad(int inodo);
+uint32_t crearIntegridad(int tamano, unsigned short* referencia);
 
 //Se utiliza para sincronizar los cambios con el disco
 int syncDisk();
