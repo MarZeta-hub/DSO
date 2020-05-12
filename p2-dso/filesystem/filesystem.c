@@ -438,11 +438,18 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 		//Actualizo el indice de bloques para obtener el siguiente bloque
 		indiceBloque = indiceBloque + 1;
 	}
-
 	//En el caso de que el numero de bytes leidos sea menor que el que me piden
-	numBytesLeidos = numBytesLeidos - punteroR;
+	
 	lecturaBloques = lecturaBloques + punteroR;	
-	memcpy(buffer, lecturaBloques, strlen(lecturaBloques));
+	printf(" hey que pasa maquina %s, %li\n", lecturaBloques, strlen(lecturaBloques));
+	if(numBytes < numBytesLeidos){ //En el caso de que lea más bytes de lo que me piden
+		memcpy(buffer, lecturaBloques, numBytes); //paso los datos de un buffer a otro
+		numBytesLeidos = numBytes; //actualizo el return de bytes
+	}else{
+		numBytesLeidos = numBytesLeidos - punteroR; //Actualizo los bytes leidos
+		memcpy(buffer, lecturaBloques, numBytesLeidos); //paso los datos de un buffer
+	}
+	
 	lecturaBloques = NULL;
 	free(lecturaBloques);
 	//Actualizo el puntero
