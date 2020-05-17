@@ -153,9 +153,12 @@ int unmountFS(void)
 		return -1;
 	} 
 	for(int i = 0; i < (sizeof(fileDescriptor) / sizeof(fileDescriptor[0])); i++ ){
-		if(strcmp(fileDescriptor[i].nombre, "") == 0){
-			if(fileDescriptor[i].abiertoConIntegridad == 0) closeFile(i); //cerrarlo sin integridad
-			else closeFileIntegrity(i); //Cerrado con integridad
+		if(strcmp(fileDescriptor[i].nombre, "") != 0){
+			if(fileDescriptor[i].abiertoConIntegridad == 0){
+				closeFile(i); //cerrarlo sin integridad
+			}else{
+				closeFileIntegrity(i); //Cerrado con integridad
+			} 
 		}
 	}
 
@@ -418,7 +421,7 @@ int readFile(int file_Descriptor, void *buffer, int numBytes)
 	//Mientras no supere los bytes leidos de disco de los bytes del usuario
 	while(numBytesLeidos < numBytes){
 		// Consigo el bloque de disco que quiero leer
-		bloqueLeido = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[indiceBloque];
+		bloqueLeido = fileDescriptor[file_Descriptor].punteroInodo[0].referencia[indiceBloque]; 
 		//Compruebo que no es el fin del fichero
 		if( bloqueLeido == bloqueEOF )break;
 		//Leo de disco para conseguir el bloque y lo añado a nuestro char
@@ -831,7 +834,7 @@ int createLn(char *fileName, char *linkName)
 	//CREAR EL INODO nuevo para el enlace:
 	bitmap_setbit(i_map, inodo_libre, 1); //Ocupo en el mapa de bits el nuevo bloque
 	//El nodo libre va a ser un puntero del enlace duro
-	inodos[inodo_libre] = inodos[inodoFichero];
+	inodos[inodo_libre]= (inodos[inodoFichero]);
 	//Elimino el nombre del fichero
 	memset(inodos[inodo_libre].nomFichero, '\0', sizeof inodos[inodo_libre].nomFichero);
 	//Le añado el nuevo nombre
