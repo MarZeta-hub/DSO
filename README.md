@@ -1,6 +1,6 @@
 # D.Operativos
 Diseño de Sistemas Operativos UC3M 2019/2020
-# Práctica 1:
+# Práctica 1
 Se basa en la administracción de hilos mediante tres formas:
 * Round-Robin: el planificador de hilos se basa en Round-Robin, haciendo que cada hilo sea ejecutado en rodajas de tiempo definidas mediante la variable QUANTUM_TICKS. La ejecución del hilo solo se detendrá cuando el proceso acabe su ejecución o cuando finalice su rodaja de tiempo.
 * Round-Robin/SJF con prioridades: en este caso se intercalan dos tipos de planificación, haciéndose uso de una planificación Round-Robin para hilos de baja prioridad y SJF (primero el trabajo más corto) para los hilos de prioridad alta. En este caso se añade el hecho de que la ejecución de un hilo con prioridad baja pueda ser expulsado por un hilo de prioridad alta.
@@ -11,7 +11,7 @@ Se basa en la administracción de hilos mediante tres formas:
 * Daniel Romero Ureña
 * Marcelino Tena Blanco
 ### Nota: 8,9
-# Práctica 2:
+# Práctica 2
 Se basa en la creación de un sistema de archivos totalmente nuevo, añadiendo llamadas del sistema totalmente nuevas creadas por nosotros:
 ### Creación de un sistema de fichero
 El sistema de archivos es una simplificación de UFS (Unix File System) enlazada, donde existe:
@@ -45,7 +45,8 @@ El sistema de archivos es una simplificación de UFS (Unix File System) enlazada
 * Daniel Romero Ureña
 * Marcelino Tena Blanco
 ### Nota: 8,4
-# Práctica Final:
+# Práctica Final
+Se basa en un resumen de la asignatura Diseño de Sistemas Operativos
 ### Gonzalo Fernández García, dssoo_tf_383212.pdf, (Nota: )
 ### Daniel Romero Ureña, dssoo_tf_100383331.pdf, (Nota: )
 ### Marcelino Tena Blanco, dssoo_tf_100383266.pdf (Nota: 9)
