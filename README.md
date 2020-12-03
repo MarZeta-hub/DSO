@@ -1,4 +1,4 @@
-# D.Operativos
+# DSO (Diseño de Sistemas Operativos)
 Diseño de Sistemas Operativos UC3M 2019/2020
 # Práctica 1
 Se basa en la administracción de hilos mediante tres formas:
