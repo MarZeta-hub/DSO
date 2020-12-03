@@ -51,7 +51,8 @@ Se basa en un resumen de la asignatura Diseño de Sistemas Operativos
 ### Daniel Romero Ureña, dssoo_tf_100383331.pdf, (Nota: )
 ### Marcelino Tena Blanco, dssoo_tf_100383266.pdf (Nota: 9)
 # Derechos de Autor
-### Todos los derechos reservados.
-### No se permite el plagio ni la copia.
-### Se permite el estudio y la modificación SOLO PARA USO PERSONAL Y PRIVADO
-### Realizado con material otorgado por la Universidad Carlos III de Madrid.
+Todos los derechos reservados.
+Se permite el estudio y la modificación SOLO PARA USO PERSONAL Y PRIVADO.
+Todos los trabajos mostrados han sido entregados a la Universidad Carlos III de Madrid con su correspondiente licencia. 
+NO SE PERMITE EL PLAGIO NI LA COPIA DEL CONTENIDO DE ESTE REPOSITORIO.
+Realizado con material otorgado por la Universidad Carlos III de Madrid.
