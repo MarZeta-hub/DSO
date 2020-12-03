@@ -36,7 +36,7 @@ El sistema de archivos es una simplificación de UFS (Unix File System) enlazada
 * includeIntegrity: función que se encarga de incluir la integridad en un fichero que no la tiene.
 * openFileIntegrity: su principal funcionalidad es la de abrir un fichero con integridad realizando un check durante este proceso.
 * closeFileIntegrity: su cometido es el de cerrar un archivo con integridad.
-### Funciones de creción de enlaces simbólicos
+### Funciones de creación de enlaces simbólicos
 * createLn: el objetivo de la función es el de crear un enlace simbólico a un archivo ya existen en el sistema de ficheros.
 * removeLn: tiene como finalidad eliminar el enlace simbólico de un determinado fichero.
 ### Para compilar usar make.
